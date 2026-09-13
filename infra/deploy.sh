@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# CommitPay を GCP に一発デプロイする。冪等（何度流しても同じ結果）。
+# CommitPay の初期インフラを作成・設定する。通常の更新は CI/CD に任せる。
 #   PROJECT_ID=xxx ./infra/deploy.sh
 set -euo pipefail
+cd "$(dirname "$0")/.."
 
 PROJECT_ID="${PROJECT_ID:?PROJECT_ID を指定してください}"
 REGION="${REGION:-asia-northeast1}"
@@ -93,19 +94,7 @@ else
 fi
 
 echo "==> 6/8 スキーマ適用（Cloud SQL Auth Proxy 経由）"
-if [ ! -x /tmp/cloud-sql-proxy ]; then
-  curl -fsSLo /tmp/cloud-sql-proxy \
-    "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.darwin.arm64"
-  chmod +x /tmp/cloud-sql-proxy
-fi
-# ADC ではなく gcloud のユーザー認証をそのまま使う（gcloud auth login だけで済ませるため）
-/tmp/cloud-sql-proxy --gcloud-auth "$CONN_NAME" --port 5433 & PROXY_PID=$!
-trap 'kill $PROXY_PID 2>/dev/null || true' EXIT
-# プロキシが listen するまで待つ
-for _ in $(seq 30); do nc -z 127.0.0.1 5433 2>/dev/null && break; sleep 1; done
-nc -z 127.0.0.1 5433 || { echo "Cloud SQL Auth Proxy の起動に失敗しました" >&2; exit 1; }
-DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5433/${DB_NAME}" npm run db:migrate
-kill $PROXY_PID 2>/dev/null || true; trap - EXIT
+PROJECT_ID="$PROJECT_ID" SERVICE="$SERVICE" bash infra/migrate-cloud.sh
 
 echo "==> 7/8 Cloud Run デプロイ"
 gcloud run deploy "$SERVICE" \

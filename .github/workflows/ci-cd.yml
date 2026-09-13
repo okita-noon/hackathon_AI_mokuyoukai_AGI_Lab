@@ -1,0 +1,109 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize the full pipeline so an older build cannot deploy after a newer one.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: commitpay
+          POSTGRES_PASSWORD: commitpay
+          POSTGRES_DB: commitpay_agi_lab
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://commitpay:commitpay@127.0.0.1:5432/commitpay_agi_lab
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Check initial and repeated schema application
+        run: |
+          npm run db:migrate
+          npm run db:migrate
+      - name: Run repository tests when present
+        run: |
+          if compgen -G 'tests/*.test.ts' > /dev/null; then
+            node --import tsx --test tests/*.test.ts
+          fi
+      - name: Build production container
+        run: docker build --tag commitpay:ci .
+      - name: Save verified image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: docker save commitpay:ci | gzip > /tmp/commitpay-image.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: production-image
+          path: /tmp/commitpay-image.tar.gz
+          retention-days: 1
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: ai-lab-okita2026
+      REGION: asia-northeast1
+      SERVICE: commitpay-agi-lab
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: production-image
+          path: /tmp
+      - run: docker load --input /tmp/commitpay-image.tar.gz
+      - name: Check deployment configuration
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SA: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$WIF_PROVIDER" && test -n "$DEPLOY_SA" || {
+            echo 'Run infra/setup-ci.sh to configure GitHub Actions authentication.' >&2
+            exit 1
+          }
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+      - name: Publish, migrate and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash infra/deploy-app.sh
