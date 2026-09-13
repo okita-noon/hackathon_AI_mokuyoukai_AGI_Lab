@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Engine } from "@/lib/types";
-import { Button, EngineBadge, OkanFace } from "@/components/ui";
+import { Button, EngineBadge } from "@/components/ui";
 
 export default function Home() {
   const router = useRouter();
@@ -18,27 +18,36 @@ export default function Home() {
 
   return (
     <div className="space-y-10">
-      {/* 読ませるのではなく、顔と一言で伝える */}
-      <section className="relative overflow-hidden rounded-3xl border-2 border-line bg-bg-soft px-6 pb-12 pt-32 text-center sm:px-10 sm:pb-16 sm:pt-36">
+      {/* 読ませるのではなく、おかんが目の前におる絵で伝える */}
+      <section className="relative overflow-hidden rounded-3xl border-2 border-line bg-bg-soft pt-24 sm:pt-28">
         <Noren />
 
-        <div className="relative mx-auto flex max-w-xl flex-col items-center gap-6">
-          <OkanFace size={152} />
+        <div className="relative sm:grid sm:grid-cols-[1fr_minmax(0,420px)] sm:items-end">
+          {/* おかん本体。顔以外は文字とかぶってよい */}
+          <img
+            src="/okan-full.webp"
+            alt="AIおかん"
+            className="pointer-events-none relative z-0 mx-auto -mt-8 -mb-10 block w-[320px] max-w-full sm:order-2 sm:mx-0 sm:-mb-8 sm:-ml-16 sm:-mt-20 sm:w-full"
+          />
 
-          <p className="relative rounded-3xl rounded-tl-lg border-2 border-line-strong bg-bg px-6 py-5 text-xl font-bold leading-snug text-balance sm:px-7 sm:text-3xl">
-            あんた、また来たんか。
-            <br />
-            まあ座り。
-          </p>
+          <div className="relative z-10 space-y-5 px-6 pb-10 sm:order-1 sm:px-10 sm:pb-14">
+            <p className="inline-block rounded-3xl rounded-bl-lg border-2 border-line-strong bg-bg px-6 py-4 text-xl font-bold leading-snug text-balance shadow-[6px_6px_0_rgba(0,0,0,0.06)] sm:px-7 sm:text-2xl">
+              あんた、また来たんか。
+              <br />
+              まあ座り。
+            </p>
 
-          <h1 className="text-2xl font-bold leading-snug text-balance sm:text-4xl">
-            あんたの目標、
-            <br className="sm:hidden" />
-            <span className="text-accent">おかんが見たるわ。</span>
-          </h1>
+            <h1 className="text-2xl font-bold leading-snug text-balance sm:text-4xl">
+              あんたの目標、
+              <br />
+              <span className="text-accent">おかんが見たるわ。</span>
+            </h1>
 
-          <Button onClick={() => router.push("/ingest")}>おかんに自分を知ってもらう</Button>
-          <EngineBadge engine={engine} />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={() => router.push("/ingest")}>おかんに自分を知ってもらう</Button>
+              <EngineBadge engine={engine} />
+            </div>
+          </div>
         </div>
       </section>
 
