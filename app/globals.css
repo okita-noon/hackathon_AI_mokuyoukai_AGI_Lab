@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #16100f;
+  --bg-soft: #211918;
+  --line: #3a2c29;
+  --fg: #f4ece4;
+  --muted: #b09a90;
+  --accent: #e4472e;
+  --accent-soft: #f2a03d;
+  --ok: #4ea672;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-soft: var(--bg-soft);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --font-sans: var(--font-jp);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  font-family: var(--font-jp), system-ui, sans-serif;
+  background-image: radial-gradient(
+    120% 80% at 50% -10%,
+    rgba(228, 71, 46, 0.18) 0%,
+    transparent 60%
+  );
+  background-attachment: fixed;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-4deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94) rotate(1deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.slam {
+  animation: slam 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.blink {
+  animation: blink 1s steps(2, start) infinite;
+}
