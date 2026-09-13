@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Promise as Contract, Verdict, Engine } from "@/lib/types";
+import { MAX_INLINE_BYTES, MAX_VIDEO_BYTES, formatBytes, type MediaMeta } from "@/lib/media-rules";
 import { Button, EngineBadge, Heading, OkanBubble } from "./ui";
 
 type Props = {
@@ -9,8 +10,6 @@ type Props = {
   onReset: () => void;
 };
 
-/** Geminiにインラインで渡せる現実的な上限。これを超えたらフレームだけ送る */
-const MAX_INLINE_VIDEO_BYTES = 8 * 1024 * 1024;
 const FRAME_COUNT = 3;
 
 export function Watch({ contract, onReset }: Props) {
@@ -18,31 +17,52 @@ export function Watch({ contract, onReset }: Props) {
   const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string }) | null>(null);
   const [scold, setScold] = useState<{ okan: string; engine: Engine } | null>(null);
   const [busy, setBusy] = useState<"judge" | "scold" | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function judge(file: File) {
     const isVideo = file.type.startsWith("video/");
-    const dataUrl = await toDataUrl(file);
-    setPreview({ url: dataUrl, isVideo });
+    if (file.size > MAX_VIDEO_BYTES) {
+      setError(`ファイルが大きすぎます（${formatBytes(file.size)}）。${formatBytes(MAX_VIDEO_BYTES)} 以内にしてください`);
+      return;
+    }
+
+    setPreview({ url: URL.createObjectURL(file), isVideo });
     setVerdict(null);
     setError(null);
+    setNote(null);
     setBusy("judge");
     try {
-      // 動画はブラウザ側でコマを抜き出しておく。動画を扱えないモデルでも判定できるようにするため
-      const frames = isVideo
-        ? await extractFrames(file, FRAME_COUNT)
-        : [{ mimeType: file.type || "image/jpeg", base64: dataUrl.split(",")[1] }];
+      const meta = isVideo ? await readVideoMeta(file) : { sizeBytes: file.size };
+      // 動画はできるだけ「動画のまま」おかんに見せる。回数は連続したコマでしか数えられない
+      const uploaded = isVideo ? await uploadToStorage(file, setProgress) : null;
+      setProgress(null);
 
-      const video =
-        isVideo && file.size <= MAX_INLINE_VIDEO_BYTES
-          ? { mimeType: file.type, base64: dataUrl.split(",")[1] }
-          : undefined;
+      const payload: Record<string, unknown> = { promise: contract, mediaMeta: meta };
+      if (uploaded) {
+        payload.storageUri = uploaded.storageUri;
+        payload.mimeType = file.type;
+        // 動画を読めないエンジンに切り替わっていた場合の保険。数百KBなので付けておく
+        payload.frames = await extractFrames(file, FRAME_COUNT);
+      } else if (isVideo) {
+        // リクエストに載せられる大きさのときだけ base64 にする（大きい動画で端末を固まらせない）
+        if (file.size <= MAX_INLINE_BYTES) {
+          payload.video = { mimeType: file.type, base64: (await toDataUrl(file)).split(",")[1] };
+        } else {
+          setNote("この環境では動画をそのまま送れないため、抜き出したコマで判定します。回数までは数えられません。");
+        }
+        // 動画を扱えないモデル向けの保険。静止画では数えられないので、あくまで最後の手段
+        payload.frames = await extractFrames(file, FRAME_COUNT);
+      } else {
+        payload.frames = [{ mimeType: file.type || "image/jpeg", base64: (await toDataUrl(file)).split(",")[1] }];
+      }
 
       const res = await fetch("/api/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ video, frames, promise: contract }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "証拠を判定できませんでした");
@@ -50,6 +70,7 @@ export function Watch({ contract, onReset }: Props) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "証拠を判定できませんでした");
     } finally {
+      setProgress(null);
       setBusy(null);
     }
   }
@@ -136,7 +157,7 @@ export function Watch({ contract, onReset }: Props) {
             ref={fileRef}
             type="file"
             accept="image/*,video/*"
-            capture="environment"
+            // capture を付けるとスマホでカメラ起動に固定され、撮り置きの動画を選べなくなる
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -151,12 +172,23 @@ export function Watch({ contract, onReset }: Props) {
               {busy === "scold" ? "…" : "期限切れにする（デモ用）"}
             </Button>
           </div>
+          {progress !== null && (
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-muted">動画を送っています… {progress}%</p>
+              <div className="h-2 overflow-hidden rounded-xl border border-line bg-white">
+                <div className="h-full bg-fg transition-[width]" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          )}
+          {note && <p className="text-xs text-muted">{note}</p>}
           {error && <p role="alert" className="text-sm font-bold text-danger">{error}</p>}
         </div>
 
         <div className="min-h-56">
           {busy === "judge" && (
-            <p aria-live="polite" className="text-muted">AIおかんが写真を確認しています…</p>
+            <p aria-live="polite" className="text-muted">
+              {progress !== null ? "動画を送っています…" : "AIおかんが証拠を確認しています…"}
+            </p>
           )}
           {verdict && (
             <div className="rise space-y-4">
@@ -166,6 +198,13 @@ export function Watch({ contract, onReset }: Props) {
               </div>
               {verdict.analyzed && (
                 <p className="text-xs text-muted">解析対象：{verdict.analyzed}</p>
+              )}
+              {typeof verdict.counted === "number" && (
+                // 回数が条件の約束では、ここが判定の核心になる
+                <p className="text-sm font-bold">
+                  数えられた回数：{verdict.counted}回
+                  {typeof verdict.required === "number" && ` / 約束は${verdict.required}回`}
+                </p>
               )}
               <p className="text-sm text-muted">
                 AIおかんが見たもの：{verdict.whatISee}
@@ -250,6 +289,66 @@ function seek(video: HTMLVideoElement, time: number): Promise<void> {
     };
     video.addEventListener("seeked", done);
     video.currentTime = time;
+  });
+}
+
+/**
+ * 署名付きURLでGCSへ直接アップロードする。
+ * 用意されていない環境（GCS_BUCKET 未設定）では null を返し、呼び出し側が base64 経路に落ちる。
+ */
+async function uploadToStorage(
+  file: File,
+  onProgress: (percent: number | null) => void,
+): Promise<{ storageUri: string } | null> {
+  const res = await fetch("/api/uploads", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mimeType: file.type, sizeBytes: file.size }),
+  });
+  if (res.status === 501) return null; // ローカルなど、直接アップロードが無い環境
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error ?? "アップロード先を用意できませんでした");
+
+  onProgress(0);
+  await new window.Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", json.uploadUrl);
+    xhr.setRequestHeader("content-type", file.type);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`動画をアップロードできませんでした (HTTP ${xhr.status})`));
+    xhr.onerror = () => reject(new Error("動画をアップロードできませんでした。通信状況を確かめてください"));
+    xhr.send(file);
+  });
+  return { storageUri: json.storageUri };
+}
+
+/** 尺と解像度をブラウザで測る。何コマ/秒で解析するかの判断に使う */
+function readVideoMeta(file: File): Promise<MediaMeta> {
+  return new window.Promise((resolve) => {
+    const video = document.createElement("video");
+    const url = URL.createObjectURL(file);
+    let settled = false;
+    const done = (extra: Partial<MediaMeta>) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve({ sizeBytes: file.size, ...extra });
+    };
+    video.preload = "metadata";
+    video.onloadedmetadata = () =>
+      done({
+        durationSec: Number.isFinite(video.duration) ? Math.round(video.duration) : null,
+        width: video.videoWidth || null,
+        height: video.videoHeight || null,
+      });
+    video.onerror = () => done({});
+    setTimeout(() => done({}), 5000); // メタデータを返さない端末で止まらないようにする
+    video.src = url;
   });
 }
 

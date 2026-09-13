@@ -43,8 +43,9 @@ export async function POST(req: Request) {
     if (extra.length > 2_000) return NextResponse.json({ error: "補足は2000文字以内です" }, { status: 400 });
     const prompt = `${PROFILE_PROMPT}\n\n---- 過去データ ----\n${flatten(pastSelf as PastSelf, extra)}`;
     const result = await generateJSON<Profile>({ system: OKAN_CHARACTER, user: prompt });
-    const profile = result?.data ?? demoProfile;
-    const engine = result?.engine ?? "demo";
+    const profile = result.data ?? demoProfile;
+    // 生成に失敗して固定文を出しているのに本物のエンジン名を出すと、画面が嘘になる
+    const engine = result.data ? result.engine : "demo";
     try {
       const user = await currentUser();
       const state: Partial<AppState> = { step: 2, profile, engine, contract: null, promiseReply: null, promiseEngine: null };
@@ -62,8 +63,8 @@ export async function POST(req: Request) {
   if (body.mode === "promise") {
     const prompt = `${PROMISE_PROMPT}\n\n---- 本人の宣言 ----\n目標: ${contract.goal}\n期限: ${contract.deadline}\nエビデンス: ${contract.evidence}\n罰金: ${contract.penalty}円\n\n---- 参考: 本人の過去 ----\n${flatten(pastSelf as PastSelf)}`;
     const result = await generateJSON<{ okan: string }>({ system: OKAN_CHARACTER, user: prompt });
-    const okan = result?.data?.okan ?? demoPromiseReply;
-    const engine = result?.engine ?? "demo";
+    const okan = result.data?.okan ?? demoPromiseReply;
+    const engine = result.data ? result.engine : "demo";
     try {
       const response = await withTransaction(async (client) => {
         const user = await currentUser(client);
@@ -95,8 +96,8 @@ export async function POST(req: Request) {
 
   const prompt = `${SCOLD_PROMPT}\n\n---- 果たせなかった約束 ----\n目標: ${contract.goal}\n期限: ${contract.deadline}\n罰金: ${contract.penalty}円\n\n---- 本人の過去の挫折歴 ----\n${flatten(pastSelf as PastSelf)}`;
   const result = await generateJSON<{ okan: string }>({ system: OKAN_CHARACTER, user: prompt });
-  const okan = result?.data?.okan ?? demoScold;
-  const engine = result?.engine ?? "demo";
+  const okan = result.data?.okan ?? demoScold;
+  const engine = result.data ? result.engine : "demo";
   try {
     await withTransaction(async (client) => {
       const user = await currentUser(client);
