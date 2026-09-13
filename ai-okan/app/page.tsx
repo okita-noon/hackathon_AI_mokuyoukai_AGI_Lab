@@ -53,7 +53,7 @@ export default function Home() {
 
       {/* 手順は読ませない。単語と番号だけ置く */}
       <ol className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-        {["知ってもらう", "気づき", "約束", "監視"].map((t, i) => (
+        {["知ってもらう", "気づき", "約束", "見守り"].map((t, i) => (
           <li key={t} className="flex items-center gap-2 sm:gap-3">
             <span className="flex items-center gap-2 rounded-full border border-line bg-bg px-4 py-2">
               <span className="grid size-6 place-items-center rounded-full bg-accent text-xs font-bold text-white">

@@ -96,7 +96,7 @@ export function Watch({ contract, onReset }: Props) {
 
   return (
     <div className="space-y-8">
-      <Heading lead="証拠を提出するまで、AIおかんは認めません。">監視</Heading>
+      <Heading lead="証拠を出すまでは、おかんは納得しません。">見守り</Heading>
 
       <dl className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         {[

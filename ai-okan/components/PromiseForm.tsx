@@ -116,7 +116,7 @@ export function PromiseForm({
             <EngineBadge engine={engine} />
           </div>
           <OkanBubble text={reply} />
-          <Button onClick={onNext}>おかんに見張ってもらう</Button>
+          <Button onClick={onNext}>おかんに見守ってもらう</Button>
         </div>
       )}
     </div>

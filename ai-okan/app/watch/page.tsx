@@ -30,7 +30,7 @@ function WatchScreen() {
     let alive = true;
     loadState().then((s) => {
       if (!alive) return;
-      // 約束を結んでいないうちは監視するものがない
+      // 約束を結んでいないうちは見守るものがない
       if (!s.contract) router.replace(s.profile ? "/promise" : "/ingest");
       else setStoredContract(s.contract);
     });
