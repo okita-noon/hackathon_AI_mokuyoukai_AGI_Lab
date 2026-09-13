@@ -114,7 +114,6 @@ export function OkanBubble({ text, tone = "normal" }: { text: string; tone?: "no
           tone === "angry" ? "border-danger" : "border-line-strong"
         }`}
       >
-        <p className="mb-1 text-xs font-bold text-muted">おかん</p>
         {text}
       </div>
     </div>
