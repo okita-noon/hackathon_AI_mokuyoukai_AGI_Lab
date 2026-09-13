@@ -1,0 +1,284 @@
+/* マイページ専用スタイル。globals.css は他トラックの所有物なので触らず CSS Modules に閉じる。
+   色は globals.css で定義済みの CSS 変数（--bg / --panel / --line / --fg / --muted /
+   --ok / --warn / --bad / --accent）だけを使う。 */
+
+.section {
+  margin-bottom: 28px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+/* ---- プロフィール ---- */
+.profile {
+  display: grid;
+  gap: 14px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #0f131a;
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.displayName {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.email {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0 0;
+  word-break: break-all;
+}
+
+/* ---- 信頼スコアゲージ ---- */
+.gauge {
+  display: grid;
+  gap: 6px;
+}
+
+.gaugeHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gaugeValue {
+  color: var(--fg);
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.gaugeTrack {
+  height: 10px;
+  background: #0f131a;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.gaugeFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--bad), var(--warn), var(--ok));
+  transition: width 400ms ease;
+}
+
+.gaugeScale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+/* ---- 実績サマリ ---- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.statLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.statValue {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.statOk {
+  color: var(--ok);
+}
+
+.statBad {
+  color: var(--bad);
+}
+
+.statAccent {
+  color: var(--accent);
+}
+
+/* ---- カード設定 ---- */
+.cardSetup {
+  display: grid;
+  gap: 14px;
+}
+
+.savedCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f131a;
+}
+
+.brand {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 6px;
+}
+
+.cardNumber {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+
+.cardExp {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.notice {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+  background: #0f131a;
+}
+
+.noticeTitle {
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.noticeBody {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.testCard {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.testCardLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.testCardNumber {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--fg);
+}
+
+.elementsBox {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f131a;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.error {
+  color: var(--bad);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.success {
+  color: var(--ok);
+  font-size: 12px;
+  margin: 0;
+}
+
+.backLink {
+  display: inline-block;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+  margin-bottom: 18px;
+}
+
+.backLink:hover {
+  color: var(--fg);
+}
+
+@media (max-width: 420px) {
+  .cardExp {
+    margin-left: 0;
+    width: 100%;
+  }
+}

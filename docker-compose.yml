@@ -1,0 +1,17 @@
+name: commitpay-agi-lab
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: commitpay
+      POSTGRES_PASSWORD: commitpay
+      POSTGRES_DB: commitpay_agi_lab
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U commitpay -d commitpay_agi_lab"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+volumes:
+  pgdata:
