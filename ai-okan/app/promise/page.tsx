@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { PromiseForm } from "@/components/PromiseForm";
 import { ErrorNote } from "@/components/ErrorNote";
 import { loadState, patch } from "@/lib/store";
-import { contractToParams } from "@/lib/handoff";
 import type { AppState, Promise as Contract } from "@/lib/types";
 
 export default function PromisePage() {
@@ -66,7 +65,7 @@ export default function PromisePage() {
         onSubmit={makePromise}
         onNext={() =>
           router.push(
-            state.contract ? `/watch?${contractToParams(state.contract)}` : "/watch",
+            "/watch",
           )
         }
       />

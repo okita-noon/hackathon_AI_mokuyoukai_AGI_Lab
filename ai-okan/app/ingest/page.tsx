@@ -22,7 +22,7 @@ export default function IngestPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "見立てを作成できませんでした");
-      patch({ profile: json.profile, engine: json.engine, step: 2 });
+      patch({ profile: json.profile, engine: json.engine, step: 2, contract: null, promiseReply: null, promiseEngine: null });
       router.push("/dossier");
     } catch (e) {
       setError(e instanceof Error ? e.message : "見立てを作成できませんでした");

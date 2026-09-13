@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import type { AppState } from "@/lib/types";
 
@@ -31,12 +32,18 @@ export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>)
   }
 }
 
-export async function currentUser(client: Pool | PoolClient = pool) {
+export function anonymousEmail(sessionId: string) {
+  const digest = createHash("sha256").update(sessionId).digest("hex");
+  return `anon-${digest}@ai-okan.invalid`;
+}
+
+export async function currentUser(sessionId: string, client: Pool | PoolClient = pool) {
   const result = await client.query(
     `INSERT INTO users (email, display_name)
-     VALUES ('demo@commitpay.dev', 'デモユーザー')
+     VALUES ($1, '匿名デモユーザー')
      ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name
      RETURNING id, ai_okan_state`,
+    [anonymousEmail(sessionId)],
   );
   return result.rows[0] as { id: string; ai_okan_state: Partial<AppState> | null };
 }

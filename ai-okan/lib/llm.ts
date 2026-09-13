@@ -14,18 +14,21 @@ export function detectEngine(): Engine {
 export type MediaInput = { mimeType: string; base64: string };
 
 type Args = { system: string; user: string; media?: MediaInput[] };
+export type JSONValidator<T> = (value: unknown) => T | null;
 
-export async function generateJSON<T>(args: Args): Promise<{ data: T; engine: Engine } | null> {
+export async function generateJSON<T>(args: Args, validate: JSONValidator<T>): Promise<{ data: T; engine: Engine } | null> {
   const engine = detectEngine();
   if (engine === "demo") return null;
   try {
-    const raw = await withTimeout(
-      engine === "vertex" || engine === "gemini" ? callGoogle(args, engine) : callOpenAI(args),
+    const raw = await withTimeout((signal) =>
+      engine === "vertex" || engine === "gemini" ? callGoogle(args, engine, signal) : callOpenAI(args, signal),
     );
-    const data = parseJSON<T>(raw);
+    const parsed = parseJSON(raw);
+    const data = parsed === null ? null : validate(parsed);
     return data ? { data, engine } : null;
   } catch (error) {
-    console.error("[llm] failed:", error);
+    // Provider errors can contain request/response bodies. Keep logs useful without retaining user data or secrets.
+    console.error("[llm] request failed", { engine, reason: failureReason(error) });
     return null;
   }
 }
@@ -42,7 +45,7 @@ function client(engine: "vertex" | "gemini") {
   return googleClient;
 }
 
-async function callGoogle({ system, user, media }: Args, engine: "vertex" | "gemini") {
+async function callGoogle({ system, user, media }: Args, engine: "vertex" | "gemini", abortSignal: AbortSignal) {
   const parts: Record<string, unknown>[] = [{ text: user }];
   for (const item of media ?? []) {
     parts.push({ inlineData: { mimeType: item.mimeType, data: item.base64 } });
@@ -50,12 +53,12 @@ async function callGoogle({ system, user, media }: Args, engine: "vertex" | "gem
   const response = await client(engine).models.generateContent({
     model: process.env.DESIGNER_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
     contents: [{ role: "user", parts }],
-    config: { systemInstruction: system, responseMimeType: "application/json", temperature: 0.5 },
+    config: { systemInstruction: system, responseMimeType: "application/json", temperature: 0.5, abortSignal },
   });
   return response.text ?? "";
 }
 
-async function callOpenAI({ system, user, media }: Args): Promise<string> {
+async function callOpenAI({ system, user, media }: Args, abortSignal: AbortSignal): Promise<string> {
   const content: Record<string, unknown>[] = [{ type: "text", text: user }];
   for (const item of media ?? []) {
     if (item.mimeType.startsWith("image/")) {
@@ -65,6 +68,7 @@ async function callOpenAI({ system, user, media }: Args): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    signal: abortSignal,
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
       messages: [{ role: "system", content: system }, { role: "user", content }],
@@ -72,36 +76,40 @@ async function callOpenAI({ system, user, media }: Args): Promise<string> {
       temperature: 0.5,
     }),
   });
-  if (!response.ok) throw new Error(`openai ${response.status}: ${await response.text()}`);
+  if (!response.ok) throw new Error(`openai request failed (${response.status})`);
   const json = await response.json();
   return json?.choices?.[0]?.message?.content ?? "";
 }
 
-async function withTimeout<T>(request: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("LLM request timed out")), TIMEOUT_MS);
-  });
+async function withTimeout<T>(request: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    return await Promise.race([request, timeout]);
+    return await request(controller.signal);
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
-function parseJSON<T>(raw: string): T | null {
+function parseJSON(raw: string): unknown | null {
   if (!raw) return null;
   const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {
-    return JSON.parse(cleaned) as T;
+    return JSON.parse(cleaned);
   } catch {
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
     if (start === -1 || end === -1) return null;
     try {
-      return JSON.parse(cleaned.slice(start, end + 1)) as T;
+      return JSON.parse(cleaned.slice(start, end + 1));
     } catch {
       return null;
     }
   }
+}
+
+function failureReason(error: unknown): string {
+  if (error instanceof Error && error.name === "AbortError") return "aborted_or_timed_out";
+  if (error instanceof Error && /timed out/i.test(error.message)) return "timed_out";
+  return "provider_request_failed";
 }

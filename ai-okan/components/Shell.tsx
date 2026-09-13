@@ -25,8 +25,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <footer className="mt-16 border-t border-line pt-6 text-xs text-muted">
         <p>ハッカソン20260913 / AI木曜会 × AGI Lab</p>
         <p className="mt-1">
-          入力した内容はこの端末のブラウザにだけ保存されます。サーバーには残りません。
+          約束と判定結果はサーバーに保存します。AI利用時は入力内容と提出した証拠をAIサービスに送信します。写真・動画そのものはアプリのDBに保存しません。
         </p>
+        <p className="mt-2">体験用デモです。罰金は記録のみで、実際の課金・送金はありません。</p>
       </footer>
     </main>
   );

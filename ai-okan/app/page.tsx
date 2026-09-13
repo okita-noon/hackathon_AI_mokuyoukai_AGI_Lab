@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import okanImage from "@/public/okan-full.webp";
 import { useRouter } from "next/navigation";
 import type { Engine } from "@/lib/types";
 import { Button, EngineBadge } from "@/components/ui";
@@ -24,8 +26,10 @@ export default function Home() {
 
         <div className="relative sm:grid sm:grid-cols-[1fr_minmax(0,420px)] sm:items-end">
           {/* おかん本体。顔以外は文字とかぶってよい */}
-          <img
-            src="/okan-full.webp"
+          <Image
+            src={okanImage}
+            sizes="(max-width: 640px) 320px, 420px"
+            preload
             alt="AIおかん"
             className="pointer-events-none relative z-0 mx-auto -mt-8 -mb-10 block w-[320px] max-w-full sm:order-2 sm:mx-0 sm:-mb-8 sm:-ml-16 sm:-mt-20 sm:w-full"
           />

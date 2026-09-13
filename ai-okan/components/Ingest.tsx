@@ -20,14 +20,18 @@ export function Ingest({
   const [extra, setExtra] = useState("");
   const [log, setLog] = useState<string[]>([]);
   const [data, setData] = useState<PastSelf | null>(null);
+  const [sourceError, setSourceError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   // 元データはバックエンドが持っている。画面は受け取って並べるだけ
   useEffect(() => {
-    fetch("/api/sources")
-      .then((r) => r.json())
-      .then((json) => setData(json))
-      .catch(() => setData(null));
-  }, []);
+    const controller = new AbortController();
+    fetch("/api/sources", { signal: controller.signal })
+      .then((r) => { if (!r.ok) throw new Error("sources unavailable"); return r.json(); })
+      .then((json) => { if (!Array.isArray(json.sources)) throw new Error("invalid sources"); setData(json); })
+      .catch(() => { if (!controller.signal.aborted) setSourceError(true); });
+    return () => controller.abort();
+  }, [attempt]);
 
   const total = data?.sources.reduce((a, s) => a + s.items.length, 0) ?? 0;
 
@@ -35,8 +39,7 @@ export function Ingest({
     if (!busy || !data) return;
     const lines = [
       ...data.sources.map((s) => `${s.label} を読み込み中… ${s.items.length}件`),
-      "時系列を突き合わせ中…",
-      "繰り返している主張を数え中…",
+      "見立ての回答を待っています…",
       "AIおかんが目を通しています…",
     ];
     let i = 0;
@@ -62,8 +65,13 @@ export function Ingest({
         {data?.note && <p className="mt-2 text-xs text-muted">{data.note}</p>}
       </div>
 
-      {data === null ? (
-        <p className="text-muted">読み込み中…</p>
+      {sourceError ? (
+        <div role="alert" className="space-y-3">
+          <p>元データを読み込めませんでした。接続を確認して、もう一度お試しください。</p>
+          <Button variant="secondary" onClick={() => { setSourceError(false); setAttempt((n) => n + 1); }}>再読み込み</Button>
+        </div>
+      ) : data === null ? (
+        <p role="status" className="text-muted">読み込み中…</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
           {data.sources.map((s) => (
@@ -100,9 +108,13 @@ export function Ingest({
           value={extra}
           onChange={(e) => setExtra(e.target.value)}
           rows={2}
+          maxLength={2000}
+          disabled={busy}
+          aria-describedby="extra-help"
           placeholder="例：最近まとまった時間が取れない"
           className="w-full rounded-xl border-2 border-line-strong bg-bg px-4 py-3 text-fg placeholder:text-muted/60"
         />
+        <p id="extra-help" className="text-xs text-muted">補足は2,000文字まで。AI利用時はこの内容もAIサービスに送信します。</p>
       </div>
 
       {busy ? (

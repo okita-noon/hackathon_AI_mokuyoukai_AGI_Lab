@@ -1,79 +1,56 @@
-# AIおかん
+# AIおかん — アプリ開発ガイド
 
-**自分以上に自分を知っとるAIが、目標を達成するまで逃がしてくれへん。**
+サービスの紹介・画面キャプチャ・評価軸は [ルートREADME](../README.md)、開発に込めた思いは [WHY_WE_BUILT_AI_OKAN.md](../WHY_WE_BUILT_AI_OKAN.md) を参照してください。
 
-ハッカソン20260913（AI木曜会 × AGI Lab）作品。
+## ローカル起動
 
-## 何を解くか
-
-| | |
-|---|---|
-| 課題 | 目標を管理できない。記録が続かない |
-| なぜ続かないか | 意志の問題ではなく、**誰にも見られていない**から |
-| 解決策 | 過去の自分を全部読んだAIが約束を結び、**証拠を出すまで許さない** |
-
-## 体験（4ステップ）
-
-1. **過去を渡す** — Gmail / X / LINE の履歴を投入（いずれも実際にエクスポートできる形式）
-2. **見立てを食らう** — AIが挫折パターンを名指しで言い当てる
-3. **約束を結ぶ** — 目標・期限・証拠・**罰金額を自分で決める**（自己拘束）
-4. **監視される** — 提出した写真・動画をマルチモーダルAIが判定。ごまかしは通らない
-
-## 動かし方
+ルートでDBを起動しスキーマを適用した後、このディレクトリで実行します。
 
 ```bash
-npm install
+npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
-PostgreSQL を起動し、ルートの `db/schema.sql` を適用してからアプリを起動する。
+`.env.local` の `DATABASE_URL` をローカルDBに設定します。AIキーなしでも固定応答のデモとして進められます。Geminiは `GOOGLE_API_KEY` または `GEMINI_API_KEY`、OpenAIは `OPENAI_API_KEY`、Vertex AIは `USE_VERTEX=1` と `GOOGLE_CLOUD_PROJECT`、実行環境の認証を使います。
 
-```bash
-docker compose -f ../docker-compose.yml up -d --wait db
-cd .. && npm run db:migrate && cd ai-okan
-DATABASE_URL=postgresql://commitpay:commitpay@localhost:55432/commitpay_agi_lab npm run dev
-```
+## 実装の範囲
 
-APIキーなしでも4ステップすべて動く（**デモモード**＝固定応答へのフェイルセーフ）。
-実際のAIで動かす場合は `.env.local` に以下のどちらかを置く。
+元データは `/api/sources` が返す `data/usutaku.json` の公開情報です。入力できるのは任意の補足で、個人のメールやSNSの実ファイル取り込みはありません。日付不明・未確認の情報は元データの印を保持しています。
 
-```bash
-GEMINI_API_KEY=...    # 優先。gemini-2.5-flash
-# または
-OPENAI_API_KEY=...    # gpt-4o-mini
-```
+人物プロファイル、約束、証拠判定、未達時の返答はAIで生成し、構造を検証します。不正な返答や障害時は `engine: demo` と固定応答を返します。固定判定は画像の意味を解析していないため、実際の達成判定ではありません。
 
-Cloud Run では `USE_VERTEX=1`、`GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATION` を使い、サービスアカウント経由で Vertex AI に接続する。
+約束・判定ログ・復元用状態はPostgreSQLへ保存します。HttpOnly Cookieで匿名セッションを分けます。Cookieを消すと状態を引き継げません。DBの障害時のみ端末キャッシュを使います。提出画像・動画はAIへ送信しますが、アプリDBにはハッシュとメタデータだけを保存します。
 
-画面右上のバッジに、**実AIで生成したのか固定応答なのか**が常に表示される。
+罰金は `MOCKED` の記録だけで、実際の課金・送金はありません。
 
-## 構成
+## 画面とAPI
 
 | パス | 役割 |
 |---|---|
-| `app/page.tsx` | 4ステップの状態遷移 |
-| `app/api/okan/` | 人物プロファイル生成・約束への返答・説教 |
-| `app/api/verify/` | 提出された写真・動画がエビデンスとして妥当かの判定 |
-| `lib/llm.ts` | Vertex AI / Gemini / OpenAI / デモモードの吸収層 |
-| `lib/backend/` | Cloud SQL 接続、約束の検証・期限変換 |
-| `data/past-self.json` | 過去2年分のサンプル履歴 36件 |
-| `docs/superpowers/specs/` | 設計書 |
+| `/` | トップ |
+| `/ingest` | 元データの確認と補足 |
+| `/dossier` | おかんの見立て |
+| `/promise` | 目標・期限・証拠・金額の設定 |
+| `/watch` | 証拠提出・判定・デモの期限切れ |
+| `/api/sources` | 公開情報データセット |
+| `/api/okan` | 状態の取得・生成・約束作成・リセット |
+| `/api/verify` | 所有者を確認した証拠判定と記録 |
+| `/api/health` | DB接続と設定されたAIエンジン |
 
-約束、判定ログ、罰金のモック記録、画面の復元状態は PostgreSQL に保存する。ハッカソン用の固定デモユーザーを使い、認証は持たない。localStorage はDBが一時的に読めない場合の表示用キャッシュとして使う。提出画像・動画の実データは保存せず、重複判定用の SHA-256 とメタデータだけを残す。
+`/api/health` は実際のAI呼び出しの成功を保証するものではありません。
 
-## 動画の扱い
+## 動画と画像
 
-証拠は写真だけでなく動画も提出できる。モデルによって解析の経路が変わる。
+ブラウザでは写真8MB、動画32MBまでを受け付けます。対応形式はJPEG・PNG・WebP・GIF・MP4・WebM・MOVです。Gemini/Vertexでは8MB以下の動画を直接送り、OpenAIまたは大きな動画では抽出した連続3フレームを送ります。API側でも本文・メディアの上限を検証します。画面の「解析対象」で送った形式を確認できます。
 
-| キー | 解析されるもの |
-|---|---|
-| `GEMINI_API_KEY` | **動画そのもの**（8MBまではインラインで送信） |
-| `OPENAI_API_KEY` | 動画から等間隔で抜き出した**連続フレーム3枚**（Chat Completions APIが動画を受け取れないため） |
-| キーなし | 固定応答（デモモード） |
+## 検証
 
-8MBを超える動画は、キーの種類にかかわらずフレームで判定する。画面の「解析対象」表示で、実際に何を見たのかが分かる。
+```bash
+npm run check
+npm run build
+npm run test:e2e  # 別途テストDBとアプリを起動
+npm run screenshots
+```
 
-## おかんの顔
-
-`public/okan.png` に配置済み。差し替える場合は同じ場所に `okan.png` / `okan.jpg` / `okan.webp` のいずれかを置く。
-どれも見つからない場合は「おかん」という文字にフォールバックする。
+起動方法、CI、ブラウザの確認範囲は [TESTING.md](../docs/TESTING.md)。設計上の境界は [CURRENT_ARCHITECTURE.md](../docs/CURRENT_ARCHITECTURE.md)、未実装の運用対策は [SECURITY.md](../SECURITY.md) に記載しています。

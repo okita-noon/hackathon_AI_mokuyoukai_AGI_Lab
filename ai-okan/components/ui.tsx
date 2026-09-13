@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import type { Engine } from "@/lib/types";
 
@@ -88,7 +89,7 @@ export function OkanFace({ tone = "normal", size = 56 }: { tone?: "normal" | "an
       aria-hidden
     >
       {src ? (
-        <img
+        <Image
           src={src}
           alt=""
           width={size}
