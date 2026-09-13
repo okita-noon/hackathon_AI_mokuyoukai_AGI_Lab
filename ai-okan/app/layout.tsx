@@ -15,7 +15,9 @@ export const metadata: Metadata = {
     "過去のデータをすべて読み込み、目標を達成するまで外圧をかけ続けるAI。達成できなければ罰金です。",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja" className={`${jp.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
