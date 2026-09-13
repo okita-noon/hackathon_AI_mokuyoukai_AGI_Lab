@@ -73,33 +73,36 @@ export function StepDots({ step }: { step: number }) {
   );
 }
 
+/** public/okan.(png|jpg|webp) を置くとおかんの顔になる。無ければ文字にフォールバック */
+const OKAN_IMAGE_CANDIDATES = ["/okan.png", "/okan.jpg", "/okan.webp"];
+
 export function OkanFace({ tone = "normal", size = 56 }: { tone?: "normal" | "angry"; size?: number }) {
-  const [broken, setBroken] = useState(false);
+  const [index, setIndex] = useState(0);
+  const src = OKAN_IMAGE_CANDIDATES[index];
   return (
     <div
-      className={`grid shrink-0 place-items-center overflow-hidden rounded-full border-2 ${
-        tone === "angry" ? "border-danger bg-white" : "border-line bg-bg-soft"
+      className={`grid shrink-0 place-items-center overflow-hidden rounded-full border-2 bg-white ${
+        tone === "angry" ? "border-danger" : "border-line-strong"
       }`}
       style={{ width: size, height: size }}
       aria-hidden
     >
-      {broken ? (
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          width={size}
+          height={size}
+          className="size-full object-cover"
+          onError={() => setIndex((i) => i + 1)}
+        />
+      ) : (
         <span
           className={`font-bold ${tone === "angry" ? "text-danger" : "text-muted"}`}
           style={{ fontSize: size * 0.26 }}
         >
           おかん
         </span>
-      ) : (
-        // 差し替え用: public/okan.png を置くとおかんの顔になる。無ければ文字にフォールバック
-        <img
-          src="/okan.png"
-          alt=""
-          width={size}
-          height={size}
-          className="size-full object-cover"
-          onError={() => setBroken(true)}
-        />
       )}
     </div>
   );
