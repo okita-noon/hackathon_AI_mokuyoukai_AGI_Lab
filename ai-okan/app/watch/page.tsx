@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Watch } from "@/components/Watch";
 import { loadState, reset } from "@/lib/store";
@@ -18,26 +18,28 @@ export default function WatchPage() {
 function WatchScreen() {
   const router = useRouter();
   const params = useSearchParams();
-  const [contract, setContract] = useState<Contract | null>(null);
+  const urlContract = useMemo(
+    () => contractFromParams(new URLSearchParams(params.toString())),
+    [params],
+  );
+  const [storedContract, setStoredContract] = useState<Contract | null>(null);
 
   useEffect(() => {
     // まずURLの引数を見る。無ければ保存された状態から拾う
-    const fromUrl = contractFromParams(new URLSearchParams(params.toString()));
-    if (fromUrl) {
-      setContract(fromUrl);
-      return;
-    }
+    if (urlContract) return;
     let alive = true;
     loadState().then((s) => {
       if (!alive) return;
       // 約束を結んでいないうちは監視するものがない
       if (!s.contract) router.replace(s.profile ? "/promise" : "/ingest");
-      else setContract(s.contract);
+      else setStoredContract(s.contract);
     });
     return () => {
       alive = false;
     };
-  }, [params, router]);
+  }, [router, urlContract]);
+
+  const contract = urlContract ?? storedContract;
 
   if (!contract) return null;
 
