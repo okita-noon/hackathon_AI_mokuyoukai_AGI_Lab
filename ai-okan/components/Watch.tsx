@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { Promise as Contract, Verdict, Engine } from "@/lib/types";
 import { Button, EngineBadge, Heading, OkanBubble } from "./ui";
+import { PenaltyCheckout } from "./PenaltyCheckout";
 import { patch } from "@/lib/store";
 import { uploadError } from "@/lib/upload";
 
@@ -18,7 +19,7 @@ const FRAME_COUNT = 3;
 export function Watch({ contract, onReset }: Props) {
   const [preview, setPreview] = useState<{ url: string; isVideo: boolean } | null>(null);
   const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string; persisted?: boolean }) | null>(null);
-  const [scold, setScold] = useState<{ okan: string; engine: Engine; persisted?: boolean } | null>(null);
+  const [scold, setScold] = useState<{ okan: string; engine: Engine; persisted?: boolean; payment?: "stripe_checkout" | "mock" } | null>(null);
   const [busy, setBusy] = useState<"judge" | "scold" | "reset" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -87,7 +88,7 @@ export function Watch({ contract, onReset }: Props) {
       if (!res.ok) throw new Error(json.error ?? "期限切れを記録できませんでした");
       setScold(json);
       setCompleted(true);
-      patch({ contract: { ...contract, status: "PENALIZED" } });
+      patch({ contract: { ...contract, status: "PENALIZED", payment: json.payment } });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "期限切れを記録できませんでした");
     } finally {
@@ -102,13 +103,14 @@ export function Watch({ contract, onReset }: Props) {
         <p className="text-6xl font-bold text-danger tabular-nums sm:text-7xl">
           ¥{contract.penalty.toLocaleString()}
         </p>
-        <p className="text-lg font-bold">{scold.persisted === false ? "デモの罰金表示" : "デモの罰金を記録しました"}</p>
-        <p className="text-sm text-muted">実際の課金・送金はありません。</p>
+        <p className="text-lg font-bold">{scold.payment === "stripe_checkout" ? "罰金のお支払い" : scold.persisted === false ? "デモの罰金表示" : "デモの罰金を記録しました"}</p>
+        {scold.payment !== "stripe_checkout" && <p className="text-sm text-muted">実際の課金・送金はありません。</p>}
         {scold.persisted === false && <p role="status">結果をサーバーに保存できませんでした。この端末でのみ表示しています。</p>}
         {error && <p role="alert" className="text-danger">{error}</p>}
         <div className="mx-auto max-w-2xl text-left">
           <OkanBubble text={scold.okan} tone="angry" />
         </div>
+        {scold.payment === "stripe_checkout" && contract.id && <PenaltyCheckout commitmentId={contract.id} amount={contract.penalty} />}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <EngineBadge engine={scold.engine} />
         </div>
@@ -121,11 +123,12 @@ export function Watch({ contract, onReset }: Props) {
 
   return (
     <div className="space-y-8">
-      <Heading lead="証拠を提出するまで、AIおかんは認めません。">監視</Heading>
+      <Heading lead="証拠を出すまでは、おかんは納得しません。">見守り</Heading>
 
       {completed && <div role="status" className="rounded-xl border border-line p-4 space-y-3">
-        <p>{contract.status === "PENALIZED" ? "この約束は終了しています。実際の課金・送金はありません。" : "この約束への提出は完了しました。次の目標にも取り組んでみましょう。"}</p>
+        <p>{contract.status === "PENALIZED" ? "この約束は終了しています。" : "この約束への提出は完了しました。次の目標にも取り組んでみましょう。"}</p>
         <Button variant="secondary" onClick={restart} disabled={busy !== null}>次の約束を始める</Button>
+        {contract.status === "PENALIZED" && contract.payment === "stripe_checkout" && contract.id && <PenaltyCheckout commitmentId={contract.id} amount={contract.penalty} />}
       </div>}
       <dl className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         {[

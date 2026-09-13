@@ -11,3 +11,8 @@ tsconfig.tsbuildinfo
 .claude
 .codex
 gha-creds-*.json
+
+**/playwright-report
+**/test-results
+**/.env*
+!**/.env.example

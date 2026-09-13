@@ -48,7 +48,7 @@ export function EngineBadge({ engine }: { engine: Engine | null }) {
 }
 
 export function StepDots({ step }: { step: number }) {
-  const labels = ["過去", "見立て", "約束", "監視"];
+  const labels = ["過去", "気づき", "約束", "見守り"];
   return (
     <ol className="flex items-center gap-1.5 text-xs font-bold">
       {labels.map((l, i) => {

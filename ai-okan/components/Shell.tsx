@@ -27,7 +27,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <p className="mt-1">
           約束と判定結果はサーバーに保存します。AI利用時は入力内容と提出した証拠をAIサービスに送信します。写真・動画そのものはアプリのDBに保存しません。
         </p>
-        <p className="mt-2">体験用デモです。罰金は記録のみで、実際の課金・送金はありません。</p>
+        <p className="mt-2">罰金は設定に応じてデモ記録、またはStripeの支払い画面をご案内します。支払い前に金額とテストモードの表示をご確認ください。</p>
       </footer>
     </main>
   );

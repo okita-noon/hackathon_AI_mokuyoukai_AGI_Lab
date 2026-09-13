@@ -86,7 +86,7 @@ export function PromiseForm({
           </Field>
         </div>
 
-        <Field label="守れなかったときに払う金額" hint="デモの金額です。実際の課金・送金はありません。">
+        <Field label="守れなかったときに払う金額" hint="未達時の金額です。支払いの有無とテストモードは支払い画面で確認できます。">
           <div className="flex items-center gap-5">
             <input
               aria-label="守れなかったときに払う金額"
@@ -122,7 +122,7 @@ export function PromiseForm({
             <EngineBadge engine={engine} />
           </div>
           <OkanBubble text={reply} />
-          <Button onClick={onNext}>おかんに見張ってもらう</Button>
+          <Button onClick={onNext}>おかんに見守ってもらう</Button>
         </div>
       )}
     </div>

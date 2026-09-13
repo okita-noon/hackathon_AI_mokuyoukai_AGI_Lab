@@ -8,6 +8,7 @@ test("a visitor can inspect, promise, record a demo penalty and reset", async ({
   async function capture(name: string) {
     if (process.env.CAPTURE_SCREENSHOTS && testInfo.project.name === "desktop") {
       await page.evaluate(() => document.fonts.ready);
+      await expect.poll(() => page.locator("img").evaluateAll((images) => images.every((img) => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0))).toBe(true);
       await page.screenshot({ path: resolve("../docs/screenshots", `${name}.png`), fullPage: true, animations: "disabled" });
     }
   }
@@ -25,15 +26,13 @@ test("a visitor can inspect, promise, record a demo penalty and reset", async ({
   await capture("03-promise");
   await page.getByRole("button", { name: "この条件で約束する" }).click();
   await expect(page.getByText("約束が成立しました")).toBeVisible();
-  await page.getByRole("button", { name: "おかんに見張ってもらう" }).click();
+  await page.getByRole("button", { name: "おかんに見守ってもらう" }).click();
   await expect(page).toHaveURL(/\/watch$/); // Private goal text does not go in the URL.
   await page.reload();
   await expect(page.getByText("参考書を10ページ進める", { exact: true })).toBeVisible();
   const response = page.waitForResponse((res) => res.url().endsWith("/api/verify") && res.request().method() === "POST");
-  await page.locator('input[type="file"]').setInputFiles({
-    name: "demo-proof.png", mimeType: "image/png",
-    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=", "base64"),
-  });
+  // Deliberately unrelated sample: the app's own character asset, never personal media.
+  await page.locator('input[type="file"]').setInputFiles(resolve("public/okan-full.webp"));
   const result = await response;
   expect(result.ok()).toBeTruthy();
   expect((await result.json()).persisted).toBe(true);

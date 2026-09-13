@@ -23,6 +23,7 @@ export type Promise = {
   deadlineAt?: string;
   evidence: string;
   penalty: number;
+  payment?: "stripe_checkout" | "mock";
   status?: "ACTIVE" | "APPROVED" | "REJECTED" | "UNCERTAIN" | "PENALIZED";
 };
 

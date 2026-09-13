@@ -22,7 +22,7 @@ npm run dev
 
 約束・判定ログ・復元用状態はPostgreSQLへ保存します。HttpOnly Cookieで匿名セッションを分けます。Cookieを消すと状態を引き継げません。DBの障害時のみ端末キャッシュを使います。提出画像・動画はAIへ送信しますが、アプリDBにはハッシュとメタデータだけを保存します。
 
-罰金は `MOCKED` の記録だけで、実際の課金・送金はありません。
+Stripeキー未設定では罰金は `MOCKED` の記録だけです。キー設定時の支払い機能は、下記のStripe Checkoutを参照してください。
 
 ## 画面とAPI
 
@@ -30,7 +30,7 @@ npm run dev
 |---|---|
 | `/` | トップ |
 | `/ingest` | 元データの確認と補足 |
-| `/dossier` | おかんの見立て |
+| `/dossier` | おかんが気づいたこと |
 | `/promise` | 目標・期限・証拠・金額の設定 |
 | `/watch` | 証拠提出・判定・デモの期限切れ |
 | `/api/sources` | 公開情報データセット |
@@ -54,3 +54,15 @@ npm run screenshots
 ```
 
 起動方法、CI、ブラウザの確認範囲は [TESTING.md](../docs/TESTING.md)。設計上の境界は [CURRENT_ARCHITECTURE.md](../docs/CURRENT_ARCHITECTURE.md)、未実装の運用対策は [SECURITY.md](../SECURITY.md) に記載しています。
+
+## Stripe Checkout
+
+`STRIPE_SECRET_KEY` を設定すると、期限切れ時に支払い待ちの請求を作り、Stripeの支払い画面とQRコードを表示します。`sk_test_` のテストキーでは実請求は発生しません。本番キーでは実際の決済につながるため、開発・スクリーンショット撮影・CIでは使いません。
+
+- `APP_BASE_URL` は支払い後に戻るアプリのURLです。
+- `/api/penalty/checkout` は所有者の請求に対してCheckoutを作成・確認します。
+- `/api/penalty/test-pay` はテストキー専用の支払い操作です。本番キーでは利用できません。
+- `/penalty/paid` は支払い後の戻り先です。QRを読んだ別端末からも支払いを確認できます。
+- 画面はStripeの状態をポーリングします。Webhookによる無人確定や指定第三者への送金は含みません。
+
+元からあるCheckoutの手動テストをする場合のみ、テスト環境でカード番号 `4242 4242 4242 4242` を使用します。この変更の自動テストではStripe APIを呼びません。

@@ -29,7 +29,7 @@ cp -R public .next/standalone/public
 mkdir -p .next/standalone/.next
 cp -R .next/static .next/standalone/.next/static
 DATABASE_URL=postgresql://commitpay:commitpay@localhost:55432/commitpay_agi_lab \
-  USE_VERTEX=0 GOOGLE_API_KEY= GEMINI_API_KEY= OPENAI_API_KEY= \
+  USE_VERTEX=0 GOOGLE_API_KEY= GEMINI_API_KEY= OPENAI_API_KEY= STRIPE_SECRET_KEY= \
   PORT=3107 HOSTNAME=localhost node .next/standalone/server.js
 ```
 
@@ -39,7 +39,7 @@ DATABASE_URL=postgresql://commitpay:commitpay@localhost:55432/commitpay_agi_lab 
 npm run test:e2e
 ```
 
-- デスクトップとモバイル幅で、見立て→約束→証拠提出→モック罰金→リセットを実APIで確認。
+- デスクトップとモバイル幅で、おかんが気づいたこと→約束→証拠提出→モック罰金→リセットを実APIで確認。
 - 別セッションから他人の約束を読めず、証拠提出やリセットもできないことを確認。
 - 元データの取得失敗からの再試行、404からの復帰を確認。
 - 保存した目標の内容をURLへ含めず、再読み込みで復元できることを確認。
@@ -56,4 +56,4 @@ CIではPostgreSQL 16と非rootの本番Dockerイメージを使います。失�
 npm run screenshots
 ```
 
-`docs/screenshots/` にトップ・見立て・約束・証拠判定の4枚を保存します。実際のページを撮影し、スクリーンショット自体に装飾や文言の合成は行いません。元データは同梱の公開情報、AI応答と判定は固定デモ応答です。撮影後は画像を目視し、文字切れや表示内容を確認してからコミットしてください。
+`docs/screenshots/` にトップ・おかんが気づいたこと・約束・証拠判定の4枚を保存します。実際のページを撮影し、スクリーンショット自体に装飾や文言の合成は行いません。元データは同梱の公開情報、AI応答と判定は固定デモ応答です。撮影後は画像を目視し、文字切れや表示内容を確認してからコミットしてください。

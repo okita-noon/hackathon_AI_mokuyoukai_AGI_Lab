@@ -5,6 +5,8 @@ import { currentUser } from "../lib/backend/db";
 import { readJsonBody, RequestTooLargeError } from "../lib/backend/request";
 import { anonymousSession, jsonWithSession, SESSION_COOKIE } from "../lib/backend/session";
 import { persistVerifiedSubmission } from "../app/api/verify/route";
+import { POST as checkoutPost } from "../app/api/penalty/checkout/route";
+import { checkoutEnabled } from "../lib/backend/payment";
 
 test("anonymous sessions receive separate HttpOnly cookies and preserve an existing session", () => {
   const first = anonymousSession(new Request("https://example.test/api/okan"));
@@ -89,4 +91,16 @@ test("verify rechecks owner and terminal status under locks before writing", asy
   assert.match(queries[0].sql, /users WHERE id=\$1 FOR UPDATE/);
   assert.match(queries[1].sql, /id=\$1 AND user_id=\$2 FOR UPDATE/);
   assert.deepEqual(queries[1].params, ["123e4567-e89b-12d3-a456-426614174000", "alice"]);
+});
+
+test("disabled checkout response still establishes the isolated session cookie", {
+  skip: checkoutEnabled,
+}, async () => {
+  const response = await checkoutPost(new Request("https://example.test/api/penalty/checkout", {
+    method: "POST",
+    body: JSON.stringify({ commitmentId: "123e4567-e89b-12d3-a456-426614174000" }),
+  }));
+  assert.equal(response.status, 503);
+  assert.match(response.headers.get("set-cookie") ?? "", /HttpOnly/i);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
 });
