@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
 import { Zen_Maru_Gothic } from "next/font/google";
 import "./globals.css";
+import { Shell } from "@/components/Shell";
 
 const jp = Zen_Maru_Gothic({
   variable: "--font-jp",
@@ -15,10 +15,12 @@ export const metadata: Metadata = {
     "過去のデータをすべて読み込み、目標を達成するまで外圧をかけ続けるAI。達成できなければ罰金です。",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja" className={`${jp.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <Shell>{children}</Shell>
+      </body>
     </html>
   );
 }
