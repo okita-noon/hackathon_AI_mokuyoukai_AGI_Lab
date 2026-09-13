@@ -60,7 +60,61 @@ npm run tick             # 締切超過・猶予切れを1回処理
 
 設計の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、参照元の開発時の分担・API 契約は [docs/HANDOFF.md](docs/HANDOFF.md) を参照してください。
 
-## GCP 用デプロイスクリプト
+## CI/CD
+
+[GitHub Actions](https://github.com/okita-noon/hackathon_AI_mokuyoukai_AGI_Lab/actions/workflows/ci-cd.yml) で次を実行します。
+
+- **main 向け PR**: 依存関係のインストール、型検査、PostgreSQL 16 へのスキーマ適用・再適用、`tests/*.test.ts` があればテスト、本番 Docker イメージのビルド。
+- **main への push（PR マージを含む）**: 同じ検証に成功したイメージを Artifact Registry に保存し、本番 DB のスキーマ適用 → Cloud Run の新リビジョン作成 → トラフィック切り替え → HTTP 確認。
+- **手動実行**: Actions の `Run workflow` で `main` を選択。ほかのブランチでは検証だけ実行します。
+
+デプロイ先は `ai-lab-okita2026` / `asia-northeast1` / `commitpay-agi-lab`。既存の環境変数・Secret Manager 参照・Cloud SQL 接続・実行サービスアカウントは維持します。イメージはコミット SHA で識別し、Actions の実行サマリーに公開 URL とリビジョンを記録します。
+
+main のパイプラインを直列化し、実行中のデプロイは新しい push で中断しません。GitHub Actions は待機中の実行を最新の実行に置き換えるため、連続 push は最新の main に集約される場合があります。古いコミットの再実行もデプロイ直前に除外します。
+
+### 初回の認証設定
+
+既存の GCP 環境と、IAM を設定できる `gcloud` 認証、リポジトリ変数を変更できる `gh` 認証が必要です。
+
+```bash
+bash infra/setup-ci.sh
+```
+
+専用のデプロイ用サービスアカウント、Artifact Registry、Workload Identity Federation を作成し、GitHub Actions の次の **Variables** を登録します。
+
+| Variable | 内容 |
+|---|---|
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | 作成した OIDC Provider の完全なリソース名 |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | `commitpay-agi-lab-deploy@ai-lab-okita2026.iam.gserviceaccount.com` |
+
+認証はこのリポジトリの ID・所有者 ID・main・対象ワークフロー・イベント種別に限定します。サービスアカウントの JSON キーは登録しません。方式の詳細は [Google の認証 Action](https://github.com/google-github-actions/auth) を参照してください。
+
+デプロイ用アカウントに付与する権限は次のとおりです。
+
+| 対象 | IAM ロール |
+|---|---|
+| Cloud Run `commitpay-agi-lab` | `roles/run.developer` |
+| Artifact Registry `commitpay-agi-lab` | `roles/artifactregistry.writer` |
+| 実行用アカウント `commitpay-agi-lab-run` | `roles/iam.serviceAccountUser` |
+| Secret `commitpay-agi-lab-db-password` | `roles/secretmanager.secretAccessor` |
+| プロジェクト `ai-lab-okita2026` | `roles/cloudsql.client`、`roles/serviceusage.serviceUsageConsumer` |
+
+さらに、条件に一致する GitHub OIDC 主体へ、デプロイ用アカウントの `roles/iam.workloadIdentityUser` を付与します。
+
+### デプロイ失敗時
+
+検証やスキーマ適用が失敗した場合、サービスのイメージは更新しません。新リビジョンの起動に失敗した場合も、既存リビジョンのトラフィックを維持します。切り替え後の HTTP 確認失敗は Actions に失敗として表示されます（自動ロールバックは行いません）。
+
+以前のリビジョンへ戻す場合は、Cloud Run のリビジョン一覧で対象を確認して実行します。
+
+```bash
+gcloud run revisions list --service commitpay-agi-lab --project ai-lab-okita2026 --region asia-northeast1
+gcloud run services update-traffic commitpay-agi-lab --project ai-lab-okita2026 --region asia-northeast1 --to-revisions=REVISION_NAME=100
+```
+
+スキーマは自動では戻りません。`db/schema.sql` の変更は再実行でき、稼働中の旧アプリとも互換性を保つ形にしてください。通常のコード更新では以下の初期構築スクリプトを実行する必要はありません。
+
+## GCP 初期構築・インフラ設定
 
 ```bash
 PROJECT_ID=ai-lab-okita2026 ./infra/deploy.sh
@@ -68,4 +122,4 @@ PROJECT_ID=ai-lab-okita2026 ./infra/deploy.sh
 
 デプロイ先は GCP の AI Lab（`ai-lab-okita2026`）です。Cloud Run、Cloud SQL、Cloud Storage、Cloud Scheduler、Secret Manager を作成します。デフォルトのサービス名は `commitpay-agi-lab` で、関連リソース名もこの接頭辞を使用します。元の `commitpay` サービスとは別のリソースになります。必要に応じて `SERVICE` を変更できます。
 
-スクリプトは参照元と同じ macOS Apple Silicon 向け Cloud SQL Auth Proxy を使います。GCP の認証・権限・課金設定が別途必要です。公開環境は Vertex AI を利用し、Stripe は未設定のためモック決済です。Cloud Scheduler が5分ごとに期限切れを処理します。
+Cloud SQL Auth Proxy は macOS / Linux の arm64 / amd64 に対応します。GCP の認証・権限・課金設定が別途必要です。公開環境は Vertex AI を利用し、Stripe は未設定のためモック決済です。Cloud Scheduler が5分ごとに期限切れを処理します。

@@ -9,3 +9,4 @@ node_modules/
 tsconfig.tsbuildinfo
 .claude/
 .codex/
+gha-creds-*.json
