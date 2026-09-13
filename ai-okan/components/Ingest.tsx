@@ -53,7 +53,7 @@ export function Ingest({
       <OkanBubble text="あんたのこと、まだ何も知らんからな。今まで何を言うてきたんか、見せてみ。格好つけても、どうせすぐ分かるで。" />
 
       <div className="rounded-xl border border-line bg-bg-soft p-5">
-        <p className="font-bold">見せた内容は、次の画面での見立てに使われます</p>
+        <p className="font-bold">見せた内容から、おかんが気づいたことを次の画面で教えてくれます</p>
         <p className="mt-2 text-sm text-muted">
           おかんは{total || "—"}件の発信を時系列で突き合わせ、
           <span className="font-bold text-fg">あなたが何を繰り返しているのか</span>を割り出します。

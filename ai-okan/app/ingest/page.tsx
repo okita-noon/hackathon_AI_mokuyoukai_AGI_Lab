@@ -21,11 +21,11 @@ export default function IngestPage() {
         body: JSON.stringify({ mode: "profile", extra }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "見立てを作成できませんでした");
+      if (!res.ok) throw new Error(json.error ?? "おかんが気づいたことをまとめられませんでした");
       patch({ profile: json.profile, engine: json.engine, step: 2 });
       router.push("/dossier");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "見立てを作成できませんでした");
+      setError(e instanceof Error ? e.message : "おかんが気づいたことをまとめられませんでした");
       setBusy(false);
     }
   }

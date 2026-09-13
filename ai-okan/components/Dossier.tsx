@@ -16,7 +16,7 @@ export function Dossier({
     <div className="space-y-8">
       <header className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="bg-accent px-3 py-1 text-xs font-bold text-white">おかんの見立て</span>
+          <span className="bg-accent px-3 py-1 text-xs font-bold text-white">おかんが気づいたこと</span>
           <EngineBadge engine={engine} />
         </div>
         <p className="text-muted">

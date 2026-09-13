@@ -14,7 +14,7 @@ export default function DossierPage() {
     let alive = true;
     loadState().then((s) => {
       if (!alive) return;
-      // 見立てがまだ無いなら、先に過去データを見せてもらう
+      // おかんが何も見ていない状態なら、先に過去データを見せてもらう
       if (!s.profile) router.replace("/ingest");
       else setState(s);
     });
