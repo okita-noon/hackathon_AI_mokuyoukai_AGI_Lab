@@ -10,3 +10,7 @@ tsconfig.tsbuildinfo
 next-env.d.ts
 .DS_Store
 gha-creds-*.json
+
+# Browser verification artifacts (curated README screenshots are tracked)
+playwright-report/
+test-results/

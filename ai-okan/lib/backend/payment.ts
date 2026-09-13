@@ -39,15 +39,15 @@ async function findPenalty(commitmentId: string, userId: string) {
 }
 
 /** 支払い済みのセッションなら請求を SUCCEEDED にする。何度呼んでも結果は同じ */
-async function settle(session: Stripe.Checkout.Session): Promise<boolean> {
+async function settle(session: Stripe.Checkout.Session, penaltyId?: string): Promise<boolean> {
   if (session.payment_status !== "paid") return false;
   const paymentIntent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
   await pool.query(
     `UPDATE penalty_transactions
         SET status = 'SUCCEEDED', paid_at = COALESCE(paid_at, now()),
             stripe_payment_intent_id = COALESCE($2, stripe_payment_intent_id)
-      WHERE stripe_checkout_session_id = $1 AND status <> 'SUCCEEDED'`,
-    [session.id, paymentIntent ?? null],
+      WHERE stripe_checkout_session_id = $1 AND ($3::uuid IS NULL OR id = $3) AND status <> 'SUCCEEDED'`,
+    [session.id, paymentIntent ?? null, penaltyId ?? null],
   );
   return true;
 }
@@ -64,7 +64,7 @@ export async function ensureCheckout(commitmentId: string, userId: string, baseU
 
   if (row.stripe_checkout_session_id) {
     const current = await stripe.checkout.sessions.retrieve(row.stripe_checkout_session_id);
-    if (await settle(current)) return { status: "paid", amount: row.amount };
+    if (await settle(current, row.id)) return { status: "paid", amount: row.amount };
     if (current.status === "open") return { status: "unpaid", amount: row.amount, url: current.url, testMode: checkoutTestMode };
   }
 
@@ -88,7 +88,7 @@ export async function checkoutStatus(commitmentId: string, userId: string): Prom
   if (!row.stripe_checkout_session_id) return { status: "unpaid", amount: row.amount, url: null, testMode: checkoutTestMode };
 
   const session = await stripe.checkout.sessions.retrieve(row.stripe_checkout_session_id);
-  if (await settle(session)) return { status: "paid", amount: row.amount };
+  if (await settle(session, row.id)) return { status: "paid", amount: row.amount };
   if (session.status === "expired") return { status: "expired", amount: row.amount };
   return { status: "unpaid", amount: row.amount, url: session.url, testMode: checkoutTestMode };
 }

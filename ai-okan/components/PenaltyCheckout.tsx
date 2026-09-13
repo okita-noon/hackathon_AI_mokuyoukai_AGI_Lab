@@ -109,6 +109,8 @@ export function PenaltyCheckout({ commitmentId, amount }: { commitmentId: string
       <p className="font-bold">罰金 {yen} を払ってな</p>
       <div className="flex flex-wrap items-center gap-6">
         {state.qr && (
+          // Locally generated QR data URL; do not send payment URLs to an image optimizer.
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={state.qr} alt="支払い画面のQRコード" width={160} height={160} className="rounded-lg border border-line" />
         )}
         <div className="min-w-48 flex-1 space-y-3">

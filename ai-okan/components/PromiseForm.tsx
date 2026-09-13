@@ -38,8 +38,10 @@ export function PromiseForm({
       <div className="space-y-8 rounded-xl border border-line bg-white p-6 sm:p-8">
         <Field label="何をやる">
           <input
+            aria-label="何をやる"
+            maxLength={200}
             value={goal}
-            disabled={locked}
+            disabled={locked || busy}
             onChange={(e) => setGoal(e.target.value)}
             className="w-full rounded-xl border-2 border-line-strong bg-white px-4 py-3 text-lg font-bold disabled:bg-bg-soft disabled:opacity-70"
           />
@@ -48,7 +50,7 @@ export function PromiseForm({
               <button
                 key={p}
                 type="button"
-                disabled={locked}
+                disabled={locked || busy}
                 onClick={() => setGoal(p)}
                 className="rounded border border-line-strong bg-bg-soft px-3 py-1.5 text-xs font-bold text-muted hover:bg-white hover:text-accent disabled:opacity-40"
               >
@@ -61,8 +63,9 @@ export function PromiseForm({
         <div className="grid items-stretch gap-6 sm:grid-cols-2">
           <Field label="いつまでに" hint="期限を決めないと「いつかやる」になります。">
             <select
+              aria-label="いつまでに"
               value={deadline}
-              disabled={locked}
+              disabled={locked || busy}
               onChange={(e) => setDeadline(e.target.value)}
               className="w-full rounded-xl border-2 border-line-strong bg-white px-4 py-3 disabled:bg-bg-soft disabled:opacity-70"
             >
@@ -73,23 +76,26 @@ export function PromiseForm({
           </Field>
           <Field label="何を証拠に出す" hint="AIおかんはこの条件で写真を判定します。">
             <input
+              aria-label="何を証拠に出す"
+              maxLength={1000}
               value={evidence}
-              disabled={locked}
+              disabled={locked || busy}
               onChange={(e) => setEvidence(e.target.value)}
               className="w-full rounded-xl border-2 border-line-strong bg-white px-4 py-3 disabled:bg-bg-soft disabled:opacity-70"
             />
           </Field>
         </div>
 
-        <Field label="守れなかったときに払う金額" hint="金額が高いほど効果があります。">
+        <Field label="守れなかったときに払う金額" hint="未達時の金額です。支払いの有無とテストモードは支払い画面で確認できます。">
           <div className="flex items-center gap-5">
             <input
+              aria-label="守れなかったときに払う金額"
               type="range"
               min={500}
               max={30000}
               step={500}
               value={penalty}
-              disabled={locked}
+              disabled={locked || busy}
               onChange={(e) => setPenalty(Number(e.target.value))}
               className="h-1 w-full accent-[var(--accent)]"
             />
@@ -102,7 +108,7 @@ export function PromiseForm({
 
       {!locked && (
         <Button
-          disabled={busy || !goal.trim()}
+          disabled={busy || !goal.trim() || !evidence.trim()}
           onClick={() => onSubmit({ goal, deadline, evidence, penalty })}
         >
           {busy ? "AIおかんが確認しています…" : "この条件で約束する"}

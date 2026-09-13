@@ -21,11 +21,11 @@ export default function IngestPage() {
         body: JSON.stringify({ mode: "profile", extra }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "おかんが気づいたことをまとめられませんでした");
-      patch({ profile: json.profile, engine: json.engine, step: 2 });
+      if (!res.ok) throw new Error(json.error ?? "おかんが気づいたことを作成できませんでした");
+      patch({ profile: json.profile, engine: json.engine, step: 2, contract: null, promiseReply: null, promiseEngine: null });
       router.push("/dossier");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "おかんが気づいたことをまとめられませんでした");
+      setError(e instanceof Error ? e.message : "おかんが気づいたことを作成できませんでした");
       setBusy(false);
     }
   }

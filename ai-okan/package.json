@@ -7,8 +7,11 @@
     "build": "next build",
     "start": "next start -p ${PORT:-8080}",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "test:e2e": "playwright test",
+    "screenshots": "CAPTURE_SCREENSHOTS=1 playwright test e2e/journey.spec.ts --project=desktop"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
@@ -20,6 +23,7 @@
     "stripe": "^22.6.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
@@ -31,5 +35,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22.9.0"
   }
 }

@@ -58,6 +58,29 @@ jobs:
           npm test --prefix ai-okan
       - name: Build production container
         run: docker build --tag commitpay:ci .
+      - name: Install browser for journey tests
+        run: cd ai-okan && npx playwright install --with-deps chromium
+      - name: Verify real browser journeys against production image
+        run: |
+          docker run -d --name ai-okan-e2e --network host -e HOSTNAME=0.0.0.0 -e PORT=3107 -e DATABASE_URL -e USE_VERTEX=0 commitpay:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3107/api/health; then break; fi
+            sleep 2
+          done
+          curl --fail --silent http://localhost:3107/api/health
+          npm run test:e2e --prefix ai-okan
+      - name: Retain browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-test-failures
+          path: |
+            ai-okan/playwright-report/
+            ai-okan/test-results/
+          retention-days: 7
+      - name: Stop test application
+        if: always()
+        run: docker logs ai-okan-e2e 2>/dev/null || true; docker rm -f ai-okan-e2e 2>/dev/null || true
       - name: Save verified image
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker save commitpay:ci | gzip > /tmp/commitpay-image.tar.gz

@@ -12,7 +12,7 @@ const jp = Zen_Maru_Gothic({
 export const metadata: Metadata = {
   title: "AIおかん — 自分以上に自分を知っているAI",
   description:
-    "過去のデータをすべて読み込み、目標を達成するまで外圧をかけ続けるAI。達成できなければ罰金です。",
+    "過去の行動パターンを知るAIおかんと約束し、頑張りを報告する目標達成アプリ。自分で決めた約束を、おかんと一緒に守りましょう。",
 };
 
 export default function RootLayout({

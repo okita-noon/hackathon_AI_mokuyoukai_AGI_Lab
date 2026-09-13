@@ -2,7 +2,7 @@ import type { Profile, Verdict } from "./types";
 
 /**
  * APIキー未設定・API失敗時のフェイルセーフ応答。
- * data/past-self.json の中身と辻褄が合うように書いてある。
+ * data/usutaku.json の中身と辻褄が合うように書いてある。
  */
 export const demoProfile: Profile = {
   headline: "あんた、AIの話しかしてへんな",
@@ -31,10 +31,10 @@ export const demoProfile: Profile = {
 };
 
 export const demoPromiseReply =
-  "はいはい、聞いたで。せやけどあんた、去年の1月も同じこと言うてたやんか。今回はごまかしきかんように写真で出してもらうからな。約束や。";
+  "約束、聞いたで。自分で決めた目標やからな。取り組んだら、決めた証拠を見せてな。一緒に確認しよか。";
 
 export const demoScold =
-  "ほれ見てみ。期限すぎてもうたやんか。忙しかった? 去年の5月もそう言うてたで。あんたは意志が弱いんやない、見張りがおらんかっただけや。罰金はきっちり払い。ほんで明日、もっぺん約束しにおいで。次は隣で見とったる。";
+  "今回は約束を守れへんかったな。何が難しかったか、振り返ってみよか。支払いが必要な場合は、画面の案内を確認してな。次は取り組める大きさにして、もう一度始めよ。";
 
 export const demoVerdicts: Record<Verdict["verdict"], Verdict> = {
   ok: {
@@ -46,7 +46,7 @@ export const demoVerdicts: Record<Verdict["verdict"], Verdict> = {
   suspicious: {
     verdict: "suspicious",
     whatISee: "屋内の風景。約束の内容と直接つながる要素が確認できない。",
-    okan: "これでごまかせると思たんか。おかんはあんたの写真フォルダの中身まで知ってんねんで。撮り直し。",
+    okan: "このデモでは画像の中身を実際には判定してへんで。AIを設定したら、約束の条件と照らして確認するからな。",
     score: 24,
   },
   ng: {

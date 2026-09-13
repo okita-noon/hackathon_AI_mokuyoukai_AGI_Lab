@@ -4,10 +4,12 @@ import { useRef, useState } from "react";
 import type { Promise as Contract, Verdict, Engine } from "@/lib/types";
 import { Button, EngineBadge, Heading, OkanBubble } from "./ui";
 import { PenaltyCheckout } from "./PenaltyCheckout";
+import { patch } from "@/lib/store";
+import { uploadError } from "@/lib/upload";
 
 type Props = {
   contract: Contract;
-  onReset: () => void;
+  onReset: () => void | Promise<void>;
 };
 
 /** Geminiにインラインで渡せる現実的な上限。これを超えたらフレームだけ送る */
@@ -16,20 +18,33 @@ const FRAME_COUNT = 3;
 
 export function Watch({ contract, onReset }: Props) {
   const [preview, setPreview] = useState<{ url: string; isVideo: boolean } | null>(null);
-  const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string }) | null>(null);
-  const [scold, setScold] = useState<{ okan: string; engine: Engine; payment?: "stripe_checkout" | "mock" } | null>(null);
-  const [busy, setBusy] = useState<"judge" | "scold" | null>(null);
+  const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string; persisted?: boolean }) | null>(null);
+  const [scold, setScold] = useState<{ okan: string; engine: Engine; persisted?: boolean; payment?: "stripe_checkout" | "mock" } | null>(null);
+  const [busy, setBusy] = useState<"judge" | "scold" | "reset" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [completed, setCompleted] = useState(contract.status === "APPROVED" || contract.status === "PENALIZED");
+
+  async function restart() {
+    setBusy("reset");
+    setError(null);
+    try { await onReset(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "リセットできませんでした"); }
+    finally { setBusy(null); }
+  }
+
   async function judge(file: File) {
-    const isVideo = file.type.startsWith("video/");
-    const dataUrl = await toDataUrl(file);
-    setPreview({ url: dataUrl, isVideo });
+    if (busy || completed) return;
+    const problem = uploadError(file);
+    if (problem) { setError(problem); return; }
     setVerdict(null);
     setError(null);
     setBusy("judge");
     try {
+      const isVideo = file.type.startsWith("video/");
+      const dataUrl = await toDataUrl(file);
+      setPreview({ url: dataUrl, isVideo });
       // 動画はブラウザ側でコマを抜き出しておく。動画を扱えないモデルでも判定できるようにするため
       const frames = isVideo
         ? await extractFrames(file, FRAME_COUNT)
@@ -48,6 +63,10 @@ export function Watch({ contract, onReset }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "証拠を判定できませんでした");
       setVerdict(json);
+      if (json.verdict === "ok") {
+        setCompleted(true);
+        patch({ contract: { ...contract, status: "APPROVED" } });
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "証拠を判定できませんでした");
     } finally {
@@ -56,6 +75,7 @@ export function Watch({ contract, onReset }: Props) {
   }
 
   async function timeUp() {
+    if (busy || completed) return;
     setBusy("scold");
     setError(null);
     try {
@@ -67,6 +87,8 @@ export function Watch({ contract, onReset }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "期限切れを記録できませんでした");
       setScold(json);
+      setCompleted(true);
+      patch({ contract: { ...contract, status: "PENALIZED", payment: json.payment } });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "期限切れを記録できませんでした");
     } finally {
@@ -81,17 +103,18 @@ export function Watch({ contract, onReset }: Props) {
         <p className="text-6xl font-bold text-danger tabular-nums sm:text-7xl">
           ¥{contract.penalty.toLocaleString()}
         </p>
-        <p className="text-lg font-bold">罰金が発動しました</p>
+        <p className="text-lg font-bold">{scold.payment === "stripe_checkout" ? "罰金のお支払い" : scold.persisted === false ? "デモの罰金表示" : "デモの罰金を記録しました"}</p>
+        {scold.payment !== "stripe_checkout" && <p className="text-sm text-muted">実際の課金・送金はありません。</p>}
+        {scold.persisted === false && <p role="status">結果をサーバーに保存できませんでした。この端末でのみ表示しています。</p>}
+        {error && <p role="alert" className="text-danger">{error}</p>}
         <div className="mx-auto max-w-2xl text-left">
           <OkanBubble text={scold.okan} tone="angry" />
         </div>
-        {scold.payment === "stripe_checkout" && contract.id && (
-          <PenaltyCheckout commitmentId={contract.id} amount={contract.penalty} />
-        )}
+        {scold.payment === "stripe_checkout" && contract.id && <PenaltyCheckout commitmentId={contract.id} amount={contract.penalty} />}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <EngineBadge engine={scold.engine} />
         </div>
-        <Button variant="secondary" onClick={onReset}>
+        <Button variant="secondary" onClick={restart} disabled={busy !== null}>
           もう一度、約束をやり直す
         </Button>
       </div>
@@ -102,6 +125,11 @@ export function Watch({ contract, onReset }: Props) {
     <div className="space-y-8">
       <Heading lead="証拠を出すまでは、おかんは納得しません。">見守り</Heading>
 
+      {completed && <div role="status" className="rounded-xl border border-line p-4 space-y-3">
+        <p>{contract.status === "PENALIZED" ? "この約束は終了しています。" : "この約束への提出は完了しました。次の目標にも取り組んでみましょう。"}</p>
+        <Button variant="secondary" onClick={restart} disabled={busy !== null}>次の約束を始める</Button>
+        {contract.status === "PENALIZED" && contract.payment === "stripe_checkout" && contract.id && <PenaltyCheckout commitmentId={contract.id} amount={contract.penalty} />}
+      </div>}
       <dl className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         {[
           { k: "約束", v: contract.goal },
@@ -119,20 +147,21 @@ export function Watch({ contract, onReset }: Props) {
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-4">
           <div
-            onClick={() => fileRef.current?.click()}
-            className="grid h-56 cursor-pointer place-items-center overflow-hidden rounded-xl border-2 border-dashed border-line-strong bg-bg-soft text-center transition hover:bg-bg-soft"
+            className="grid h-56 place-items-center overflow-hidden rounded-xl border-2 border-dashed border-line-strong bg-bg-soft text-center transition hover:bg-bg-soft"
           >
             {preview ? (
               // 提出された証拠のプレビュー
               preview.isVideo ? (
                 <video src={preview.url} controls playsInline className="size-full object-cover" />
               ) : (
+                // User-selected data URL: already local; never send it through the image optimizer.
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview.url} alt="提出した証拠" className="size-full object-cover" />
               )
             ) : (
               <div className="space-y-2 px-6">
                 <p className="font-bold">証拠の写真・動画を出す</p>
-                <p className="text-xs text-muted">タップして撮影／ファイルを選ぶ</p>
+                <p className="text-xs text-muted">下のボタンから撮影／ファイルを選ぶ</p>
               </div>
             )}
           </div>
@@ -141,17 +170,19 @@ export function Watch({ contract, onReset }: Props) {
             type="file"
             accept="image/*,video/*"
             capture="environment"
+            disabled={busy !== null || completed}
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) judge(f);
+              if (f) void judge(f);
+              e.target.value = "";
             }}
           />
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => fileRef.current?.click()} disabled={busy !== null}>
+            <Button onClick={() => fileRef.current?.click()} disabled={busy !== null || completed}>
               {busy === "judge" ? "判定しています…" : "証拠を提出する"}
             </Button>
-            <Button variant="secondary" onClick={timeUp} disabled={busy !== null}>
+            <Button variant="secondary" onClick={timeUp} disabled={busy !== null || completed}>
               {busy === "scold" ? "…" : "期限切れにする（デモ用）"}
             </Button>
           </div>
@@ -162,6 +193,7 @@ export function Watch({ contract, onReset }: Props) {
           {busy === "judge" && (
             <p aria-live="polite" className="text-muted">AIおかんが写真を確認しています…</p>
           )}
+          {verdict?.persisted === false && <p role="status" className="mb-4 text-sm text-muted">判定結果をサーバーに保存できませんでした。この端末でのみ表示しています。</p>}
           {verdict && (
             <div className="rise space-y-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -215,8 +247,9 @@ async function extractFrames(file: File, count: number): Promise<{ mimeType: str
 
   try {
     await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("動画を読み込めませんでした"));
+      const timer = setTimeout(() => reject(new Error("動画の読み込みに時間がかかっています。短い動画でお試しください。")), 10_000);
+      video.onloadedmetadata = () => { clearTimeout(timer); resolve(); };
+      video.onerror = () => { clearTimeout(timer); reject(new Error("動画を読み込めませんでした")); };
     });
 
     const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
@@ -247,8 +280,14 @@ async function extractFrames(file: File, count: number): Promise<{ mimeType: str
 }
 
 function seek(video: HTMLVideoElement, time: number): Promise<void> {
-  return new window.Promise((resolve) => {
+  if (Math.abs(video.currentTime - time) < 0.001 && video.readyState >= 2) return Promise.resolve();
+  return new window.Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      video.removeEventListener("seeked", done);
+      reject(new Error("動画の解析に時間がかかっています"));
+    }, 5_000);
     const done = () => {
+      clearTimeout(timer);
       video.removeEventListener("seeked", done);
       resolve();
     };

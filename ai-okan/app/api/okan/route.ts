@@ -1,18 +1,21 @@
-import { NextResponse } from "next/server";
 import pastSelf from "@/data/usutaku.json";
 import { currentUser, saveState, withTransaction } from "@/lib/backend/db";
 import { deadlineAt, validateContract } from "@/lib/backend/contract";
+import { readJsonBody, RequestTooLargeError } from "@/lib/backend/request";
+import { anonymousSession, jsonWithSession } from "@/lib/backend/session";
 import { checkoutEnabled } from "@/lib/backend/payment";
 import { generateJSON, detectEngine } from "@/lib/llm";
+import { validateOkanReply, validateProfile } from "@/lib/ai-validation";
 import { OKAN_CHARACTER, PROFILE_PROMPT, PROMISE_PROMPT, SCOLD_PROMPT } from "@/lib/prompts";
 import { demoProfile, demoPromiseReply, demoScold } from "@/lib/demo";
-import type { AppState, Profile, PastSelf } from "@/lib/types";
+import type { AppState, PastSelf } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 type Body = { mode?: unknown; extra?: unknown; promise?: unknown };
+const MAX_BODY_BYTES = 16 * 1024;
 
 function flatten(data: PastSelf, extra?: string) {
   const lines = data.sources.flatMap((source) =>
@@ -22,52 +25,62 @@ function flatten(data: PastSelf, extra?: string) {
   return lines.join("\n");
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const session = anonymousSession(req);
   try {
-    const user = await currentUser();
+    const user = await currentUser(session.id);
     const state = user.ai_okan_state && Object.keys(user.ai_okan_state).length > 0 ? user.ai_okan_state : null;
-    return NextResponse.json({ engine: detectEngine(), state });
+    return jsonWithSession(session, { engine: detectEngine(), state });
   } catch (error) {
     console.error("[okan:get]", error);
-    return NextResponse.json({ engine: detectEngine(), state: null, persisted: false });
+    return jsonWithSession(session, { engine: detectEngine(), state: null, persisted: false });
   }
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as Body | null;
+  const session = anonymousSession(req);
+  let body: Body | null;
+  try {
+    body = await readJsonBody(req, MAX_BODY_BYTES) as Body | null;
+  } catch (error) {
+    if (error instanceof RequestTooLargeError) {
+      return jsonWithSession(session, { error: "リクエストが大きすぎます" }, { status: 413 });
+    }
+    throw error;
+  }
   if (!body || !["profile", "promise", "scold"].includes(String(body.mode))) {
-    return NextResponse.json({ error: "mode が不正です" }, { status: 400 });
+    return jsonWithSession(session, { error: "mode が不正です" }, { status: 400 });
   }
 
   if (body.mode === "profile") {
     const extra = typeof body.extra === "string" ? body.extra.trim() : "";
-    if (extra.length > 2_000) return NextResponse.json({ error: "補足は2000文字以内です" }, { status: 400 });
+    if (extra.length > 2_000) return jsonWithSession(session, { error: "補足は2000文字以内です" }, { status: 400 });
     const prompt = `${PROFILE_PROMPT}\n\n---- 過去データ ----\n${flatten(pastSelf as PastSelf, extra)}`;
-    const result = await generateJSON<Profile>({ system: OKAN_CHARACTER, user: prompt });
+    const result = await generateJSON({ system: OKAN_CHARACTER, user: prompt }, validateProfile);
     const profile = result?.data ?? demoProfile;
     const engine = result?.engine ?? "demo";
     try {
-      const user = await currentUser();
+      const user = await currentUser(session.id);
       const state: Partial<AppState> = { step: 2, profile, engine, contract: null, promiseReply: null, promiseEngine: null };
       await saveState(user.id, state);
-      return NextResponse.json({ profile, engine, state });
+      return jsonWithSession(session, { profile, engine, state });
     } catch (error) {
       console.error("[okan:profile]", error);
-      return NextResponse.json({ profile, engine, state: null, persisted: false });
+      return jsonWithSession(session, { profile, engine, state: null, persisted: false });
     }
   }
 
   const contract = validateContract(body.promise);
-  if (!contract) return NextResponse.json({ error: "約束の内容が不正です" }, { status: 400 });
+  if (!contract) return jsonWithSession(session, { error: "約束の内容が不正です" }, { status: 400 });
 
   if (body.mode === "promise") {
     const prompt = `${PROMISE_PROMPT}\n\n---- 本人の宣言 ----\n目標: ${contract.goal}\n期限: ${contract.deadline}\nエビデンス: ${contract.evidence}\n罰金: ${contract.penalty}円\n\n---- 参考: 本人の過去 ----\n${flatten(pastSelf as PastSelf)}`;
-    const result = await generateJSON<{ okan: string }>({ system: OKAN_CHARACTER, user: prompt });
+    const result = await generateJSON({ system: OKAN_CHARACTER, user: prompt }, validateOkanReply);
     const okan = result?.data?.okan ?? demoPromiseReply;
     const engine = result?.engine ?? "demo";
     try {
       const response = await withTransaction(async (client) => {
-        const user = await currentUser(client);
+        const user = await currentUser(session.id, client);
         await client.query(
           `UPDATE commitments SET status='CANCELED', updated_at=now()
            WHERE user_id=$1 AND status IN ('ACTIVE','SUBMITTED','GRACE','UNDER_REVIEW')`,
@@ -87,21 +100,24 @@ export async function POST(req: Request) {
         await saveState(user.id, state, client);
         return { state, contract: savedContract };
       });
-      return NextResponse.json({ okan, engine, ...response });
+      return jsonWithSession(session, { okan, engine, ...response });
     } catch (error) {
       console.error("[okan:promise]", error);
       const local = { ...contract, id: null, deadlineAt: deadlineAt(contract.deadline).toISOString() };
-      return NextResponse.json({ okan, engine, contract: local, state: null, persisted: false });
+      return jsonWithSession(session, { okan, engine, contract: local, state: null, persisted: false });
     }
   }
 
   const prompt = `${SCOLD_PROMPT}\n\n---- 果たせなかった約束 ----\n目標: ${contract.goal}\n期限: ${contract.deadline}\n罰金: ${contract.penalty}円\n\n---- 本人の過去の挫折歴 ----\n${flatten(pastSelf as PastSelf)}`;
-  const result = await generateJSON<{ okan: string }>({ system: OKAN_CHARACTER, user: prompt });
+  const result = await generateJSON(
+    { system: OKAN_CHARACTER, user: prompt },
+    (value) => validateOkanReply(value, 150),
+  );
   const okan = result?.data?.okan ?? demoScold;
   const engine = result?.engine ?? "demo";
   try {
     await withTransaction(async (client) => {
-      const user = await currentUser(client);
+      const user = await currentUser(session.id, client);
       if (!contract.id) throw new Error("commitment id is required");
       const updated = await client.query(
         `UPDATE commitments SET status='PENALIZED', updated_at=now()
@@ -121,18 +137,36 @@ export async function POST(req: Request) {
           checkoutEnabled ? "stripe_checkout" : "mock",
         ],
       );
+      const state = (await client.query(
+        `SELECT ai_okan_state FROM users WHERE id=$1`,
+        [user.id],
+      )).rows[0]?.ai_okan_state ?? {};
+      await saveState(user.id, {
+        ...state,
+        contract: {
+          ...(state.contract ?? contract),
+          status: "PENALIZED",
+          payment: checkoutEnabled ? "stripe_checkout" : "mock",
+        },
+      }, client);
     });
-    return NextResponse.json({ okan, engine, payment: checkoutEnabled ? "stripe_checkout" : "mock" });
+    return jsonWithSession(session, {
+      okan,
+      engine,
+      payment: checkoutEnabled ? "stripe_checkout" : "mock",
+      persisted: true,
+    });
   } catch (error) {
     console.error("[okan:scold]", error);
-    return NextResponse.json({ okan, engine, persisted: false });
+    return jsonWithSession(session, { okan, engine, persisted: false });
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
+  const session = anonymousSession(req);
   try {
     await withTransaction(async (client) => {
-      const user = await currentUser(client);
+      const user = await currentUser(session.id, client);
       await client.query(
         `UPDATE commitments SET status='CANCELED', updated_at=now()
          WHERE user_id=$1 AND status IN ('ACTIVE','SUBMITTED','GRACE','UNDER_REVIEW')`,
@@ -140,9 +174,9 @@ export async function DELETE() {
       );
       await saveState(user.id, {}, client);
     });
-    return NextResponse.json({ ok: true });
+    return jsonWithSession(session, { ok: true });
   } catch (error) {
     console.error("[okan:delete]", error);
-    return NextResponse.json({ ok: true, persisted: false });
+    return jsonWithSession(session, { ok: true, persisted: false });
   }
 }
