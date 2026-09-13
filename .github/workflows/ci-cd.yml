@@ -43,6 +43,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm ci --prefix ai-okan
+      - run: npm run typecheck --prefix ai-okan
+      - run: npm run lint --prefix ai-okan
       - name: Check initial and repeated schema application
         run: |
           npm run db:migrate
@@ -52,6 +55,7 @@ jobs:
           if compgen -G 'tests/*.test.ts' > /dev/null; then
             node --import tsx --test tests/*.test.ts
           fi
+          npm test --prefix ai-okan
       - name: Build production container
         run: docker build --tag commitpay:ci .
       - name: Save verified image
