@@ -19,6 +19,8 @@ export type MediaSource = {
   mimeType: string;
   /** GCSに直接アップロードされた動画 */
   storageUri?: string | null;
+  /** Files API に上がっている動画の URI（GCSが無い環境での動画経路） */
+  fileUri?: string | null;
   /** リクエストに載ってきた base64（写真・小さい動画） */
   base64?: string | null;
   meta?: MediaMeta | null;
@@ -34,11 +36,22 @@ export function isVideo(mimeType?: string | null): boolean {
   return Boolean(mimeType?.startsWith("video/"));
 }
 
+/**
+ * 実際に使うコマ数/秒。
+ * 既定は尺から決めるが、VIDEO_FPS で上書きできる（回数の数え落ちが出たときの調整用）。
+ */
+export function analysisFps(meta?: MediaMeta | null): number {
+  const override = Number(process.env.VIDEO_FPS);
+  return Number.isFinite(override) && override > 0 && override <= 24
+    ? override
+    : samplingFps(meta?.durationSec);
+}
+
 /** 動画をどう見るかの指定。回数を数えるために、短い動画ほどコマを細かく取る */
 function videoMetadata(meta?: MediaMeta | null) {
   const { truncated } = analyzedSeconds(meta?.durationSec);
   return {
-    fps: samplingFps(meta?.durationSec),
+    fps: analysisFps(meta),
     ...(truncated ? { endOffset: `${MAX_ANALYZED_SECONDS}s` } : {}),
   };
 }
@@ -46,6 +59,10 @@ function videoMetadata(meta?: MediaMeta | null) {
 export async function toParts(client: GoogleGenAI, engine: Engine, source: MediaSource): Promise<Part[]> {
   const video = isVideo(source.mimeType);
   const extra = video ? { videoMetadata: videoMetadata(source.meta) } : {};
+
+  if (source.fileUri) {
+    return [{ fileData: { fileUri: source.fileUri, mimeType: source.mimeType }, ...extra }];
+  }
 
   if (source.storageUri) {
     if (engine === "vertex") {
@@ -62,6 +79,37 @@ export async function toParts(client: GoogleGenAI, engine: Engine, source: Media
   }
 
   throw new Error("エビデンスを読み込めませんでした");
+}
+
+/**
+ * バイト列を Files API に上げ、解析できる状態になったファイルを返す。
+ * GCS が無い環境（ローカル開発）で、inline に載らない大きさの動画を渡すために使う。
+ * Vertex AI には Files API が無いので、APIキー運用のときだけ呼べる。
+ */
+export async function uploadVideoToFilesApi(
+  client: GoogleGenAI,
+  bytes: Buffer,
+  mimeType: string,
+): Promise<{ name: string }> {
+  const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const file = await client.files.upload({ file: new Blob([body], { type: mimeType }), config: { mimeType } });
+  if (!file.name) throw new Error("Files API がファイル名を返しませんでした");
+  return { name: file.name };
+}
+
+/** Files API 上のファイルを名前で引き直す。URIとハッシュはクライアントの申告ではなくここで取る */
+export async function resolveFilesApiVideo(
+  client: GoogleGenAI,
+  name: string,
+): Promise<{ fileUri: string; mimeType: string; hash: string | null; sizeBytes: number }> {
+  const ready = await waitUntilActive(client, await client.files.get({ name }));
+  if (!ready.uri) throw new Error("Files API がファイルURIを返しませんでした");
+  return {
+    fileUri: ready.uri,
+    mimeType: ready.mimeType ?? "video/mp4",
+    hash: ready.sha256Hash ? String(ready.sha256Hash) : null,
+    sizeBytes: Number(ready.sizeBytes ?? 0),
+  };
 }
 
 async function uploadToFilesApi(

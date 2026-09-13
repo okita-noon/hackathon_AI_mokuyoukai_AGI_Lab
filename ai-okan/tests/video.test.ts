@@ -15,11 +15,12 @@ test("約束の文面から必要な回数を読む", () => {
 });
 
 test("短い動画ほど細かくサンプリングする（回数を数えるため）", () => {
-  assert.equal(samplingFps(15), 4); // 十数秒の腕立て動画
-  assert.equal(samplingFps(30), 4);
-  assert.equal(samplingFps(45), 2);
+  // 実機の腕立て動画で 4コマ/秒は 6〜10回とぶれ、10コマ/秒で 10回に安定した
+  assert.equal(samplingFps(11), 10); // 十数秒の腕立て動画
+  assert.equal(samplingFps(20), 10);
+  assert.equal(samplingFps(45), 4);
   assert.equal(samplingFps(300), 1);
-  assert.equal(samplingFps(null), 2); // 尺不明でも数えられる程度には密に
+  assert.equal(samplingFps(null), 4); // 尺不明でも数えられる程度には密に
 });
 
 test("長い動画は先頭だけを解析する", () => {

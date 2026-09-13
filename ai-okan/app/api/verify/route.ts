@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { currentUser, pool, saveState, withTransaction } from "@/lib/backend/db";
 import { validateContract } from "@/lib/backend/contract";
-import { generateJSON, detectEngine, type MediaInput } from "@/lib/llm";
+import { client, generateJSON, detectEngine, type MediaInput } from "@/lib/llm";
 import { OKAN_CHARACTER, JUDGE_PROMPT, VERDICT_SCHEMA } from "@/lib/prompts";
-import type { MediaSource } from "@/lib/media";
+import { analysisFps, resolveFilesApiVideo, type MediaSource } from "@/lib/media";
 import {
   MAX_ANALYZED_SECONDS,
   MAX_VIDEO_BYTES,
@@ -12,7 +12,6 @@ import {
   formatBytes,
   formatDuration,
   requiredCount,
-  samplingFps,
   type MediaMeta,
 } from "@/lib/media-rules";
 import { deleteObject, isOwnObject, statObject } from "@/lib/storage";
@@ -32,6 +31,8 @@ type Body = {
   frames?: unknown;
   promise?: unknown;
   storageUri?: unknown;
+  /** GCSが無い環境で Files API に上げた動画（files/xxxx） */
+  fileName?: unknown;
   mimeType?: unknown;
   mediaMeta?: unknown;
 };
@@ -66,6 +67,9 @@ export async function POST(req: Request) {
 
   // 動画は署名付きURLでGCSへ直接上げ、ここにはURIだけが届く（Cloud Runの32MB制限を回避）
   const storageUri = typeof body?.storageUri === "string" ? body.storageUri : null;
+  const fileName = typeof body?.fileName === "string" && /^files\/[a-z0-9-]{1,64}$/i.test(body.fileName)
+    ? body.fileName
+    : null;
   const uploadedMime = typeof body?.mimeType === "string" ? body.mimeType : null;
   const meta = mediaMeta(body?.mediaMeta);
 
@@ -78,7 +82,7 @@ export async function POST(req: Request) {
   if (storageUri && (!isOwnObject(storageUri) || !uploadedMime?.startsWith("video/"))) {
     return NextResponse.json({ error: "アップロード先が不正です" }, { status: 400 });
   }
-  if (!storageUri && !video && frames.length === 0) {
+  if (!storageUri && !fileName && !video && frames.length === 0) {
     return NextResponse.json({ error: "写真または動画を選んでください" }, { status: 400 });
   }
   if (!storageUri && inlineSize > MAX_BASE64_CHARS) {
@@ -121,12 +125,25 @@ export async function POST(req: Request) {
 
     const engine = detectEngine();
     const googleEngine = engine === "vertex" || engine === "gemini";
+
+    // Files API に上げた動画は、URIとハッシュをサーバー側で引き直す（クライアントの申告を信用しない）
+    let filesApiHash: string | null = null;
+    let filesApiSource: MediaSource | null = null;
+    if (fileName && engine === "gemini") {
+      const file = await resolveFilesApiVideo(client(engine), fileName);
+      filesApiHash = file.hash;
+      filesApiSource = { mimeType: file.mimeType, fileUri: file.fileUri, meta };
+      if (file.sizeBytes) meta.sizeBytes = file.sizeBytes;
+    }
+
     // OpenAI は動画を受け取れないので、ブラウザで抜いた連続フレームで代替する
-    const sources: MediaSource[] = storageUri && googleEngine
-      ? [{ mimeType: uploadedMime!, storageUri, meta }]
-      : video && googleEngine
-        ? [{ mimeType: video.mimeType, base64: video.base64, meta }]
-        : [];
+    const sources: MediaSource[] = filesApiSource
+      ? [filesApiSource]
+      : storageUri && googleEngine
+        ? [{ mimeType: uploadedMime!, storageUri, meta }]
+        : video && googleEngine
+          ? [{ mimeType: video.mimeType, base64: video.base64, meta }]
+          : [];
     const inline = sources.length ? [] : frames;
 
     // 動画を読めないエンジン（OpenAI）で、代わりのフレームも無い場合だけ手詰まり
@@ -136,7 +153,7 @@ export async function POST(req: Request) {
     }
 
     const required = requiredCount(`${commitment.title} ${commitment.verification_rule}`);
-    const isVideoSubmission = Boolean(storageUri || video);
+    const isVideoSubmission = Boolean(storageUri || fileName || video);
     const kind = describe(isVideoSubmission, sources.length > 0, frames.length, meta);
     const prompt = `${JUDGE_PROMPT}
 
@@ -171,7 +188,8 @@ ${required !== null ? `約束した回数: ${required}回（この回数に届�
 
     let verdict = normalizeVerdict(generated.data ?? demoVerdictFor(inlineSize + (meta.sizeBytes ?? 0)), required);
     const inlineSeed = video ?? frames[0];
-    const hash = remoteHash ?? createHash("sha256").update(inlineSeed?.base64 ?? storageUri ?? "").digest("hex");
+    const hash = remoteHash ?? filesApiHash
+      ?? createHash("sha256").update(inlineSeed?.base64 ?? storageUri ?? "").digest("hex");
     const duplicate = await pool.query(
       `SELECT 1 FROM proof_submissions p JOIN commitments c ON c.id=p.commitment_id
        WHERE c.user_id=$1 AND p.content_sha256=$2 AND p.commitment_id<>$3 LIMIT 1`,
@@ -181,7 +199,7 @@ ${required !== null ? `約束した回数: ${required}回（この回数に届�
       verdict = { ...verdict, verdict: "suspicious", score: Math.min(verdict.score, 40), okan: "前にも同じ証拠を出してるやろ。撮り直して出しや。" };
     }
 
-    const mimeType = uploadedMime ?? video?.mimeType ?? frames[0]?.mimeType ?? "image/jpeg";
+    const mimeType = filesApiSource?.mimeType ?? uploadedMime ?? video?.mimeType ?? frames[0]?.mimeType ?? "image/jpeg";
     await withTransaction(async (client) => {
       const proof = await client.query(
         `INSERT INTO proof_submissions
@@ -190,7 +208,7 @@ ${required !== null ? `約束した回数: ${required}回（この回数に届�
         [
           // エビデンス本体は保存しない。これは「何を見たか」を後から辿るための印
           contract.id, `${remoteHash ? "deleted" : "inline"}://${hash}`, mimeType, isVideoSubmission ? "video" : "photo",
-          hash, remoteHash ? "gcs-md5" : "sha256", JSON.stringify({ ...meta, analyzed: kind, counted: verdict.counted ?? null }),
+          hash, remoteHash ? "gcs-md5" : filesApiHash ? "files-api-sha256" : "sha256", JSON.stringify({ ...meta, analyzed: kind, counted: verdict.counted ?? null }),
         ],
       );
       const status = verdict.verdict === "ok" ? "APPROVED" : verdict.verdict === "ng" ? "REJECTED" : "UNCERTAIN";
@@ -243,5 +261,5 @@ function describe(isVideo: boolean, asVideo: boolean, frameCount: number, meta: 
     : seconds
       ? `全編${seconds}秒`
       : "全編";
-  return `動画そのもの（${formatDuration(meta.durationSec)} / ${range} / ${samplingFps(meta.durationSec)}コマ per 秒でサンプリング）`;
+  return `動画そのもの（${formatDuration(meta.durationSec)} / ${range} / ${analysisFps(meta)}コマ per 秒でサンプリング）`;
 }

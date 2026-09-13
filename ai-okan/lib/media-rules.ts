@@ -25,17 +25,28 @@ export type MediaMeta = {
 };
 
 /**
+ * サンプリングの段階。
+ * 実測（10.7秒・腕立て10回の実機動画）では 4コマ/秒だと同じ動画で 6〜10回とぶれ、
+ * 10コマ/秒では3回連続で 10回に一致した。回数を数えるには1回あたり10コマ前後が要る。
+ */
+export const COUNTABLE_VIDEO_SECONDS = 20;
+export const COUNTABLE_VIDEO_FPS = 10;
+export const SHORT_VIDEO_SECONDS = 60;
+export const SHORT_VIDEO_FPS = 4;
+export const DEFAULT_VIDEO_FPS = 1;
+
+/**
  * 動画を何コマ/秒で見るか。
  *
- * 「腕立て10回」のような回数の判定では、1コマ/秒だと1回の上下動を跨いでしまい数え落とす。
- * 短い動画ほど密に見る。15秒の動画なら 4fps = 60コマで、1回あたり4〜6コマ残る。
+ * 「腕立て10回」のような回数の判定では、コマが粗いと1回の上下動を跨いで数え落とす。
+ * 20秒以下は 10コマ/秒（10秒の動画で約100コマ）。VIDEO_FPS で上書きできる（lib/media.ts）。
  */
 export function samplingFps(durationSec?: number | null): number {
   const d = Number(durationSec ?? 0);
-  if (!Number.isFinite(d) || d <= 0) return 2; // 尺不明。回数を数えられる程度には密にしておく
-  if (d <= 30) return 4;
-  if (d <= 60) return 2;
-  return 1;
+  if (!Number.isFinite(d) || d <= 0) return SHORT_VIDEO_FPS; // 尺不明。数えられる程度には密にしておく
+  if (d <= COUNTABLE_VIDEO_SECONDS) return COUNTABLE_VIDEO_FPS;
+  if (d <= SHORT_VIDEO_SECONDS) return SHORT_VIDEO_FPS;
+  return DEFAULT_VIDEO_FPS;
 }
 
 export function analyzedSeconds(durationSec?: number | null): { seconds: number | null; truncated: boolean } {

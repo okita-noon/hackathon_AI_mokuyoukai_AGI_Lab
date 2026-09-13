@@ -41,10 +41,14 @@ export function Watch({ contract, onReset }: Props) {
       setProgress(null);
 
       const payload: Record<string, unknown> = { promise: contract, mediaMeta: meta };
-      if (uploaded) {
+      if (uploaded?.storageUri) {
         payload.storageUri = uploaded.storageUri;
         payload.mimeType = file.type;
         // 動画を読めないエンジンに切り替わっていた場合の保険。数百KBなので付けておく
+        payload.frames = await extractFrames(file, FRAME_COUNT);
+      } else if (uploaded?.fileName) {
+        payload.fileName = uploaded.fileName;
+        payload.mimeType = file.type;
         payload.frames = await extractFrames(file, FRAME_COUNT);
       } else if (isVideo) {
         // リクエストに載せられる大きさのときだけ base64 にする（大きい動画で端末を固まらせない）
@@ -293,38 +297,61 @@ function seek(video: HTMLVideoElement, time: number): Promise<void> {
 }
 
 /**
- * 署名付きURLでGCSへ直接アップロードする。
- * 用意されていない環境（GCS_BUCKET 未設定）では null を返し、呼び出し側が base64 経路に落ちる。
+ * 動画本体を「動画のまま」判定に回せる場所へ置く。
+ *  1. GCS の署名付きURL（本番）
+ *  2. それが無い環境では、サーバー経由で Gemini の Files API（APIキー運用のローカル）
+ * どちらも使えない場合は null を返し、呼び出し側が base64／静止画の経路に落ちる。
  */
 async function uploadToStorage(
   file: File,
   onProgress: (percent: number | null) => void,
-): Promise<{ storageUri: string } | null> {
+): Promise<{ storageUri?: string; fileName?: string } | null> {
   const res = await fetch("/api/uploads", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mimeType: file.type, sizeBytes: file.size }),
   });
-  if (res.status === 501) return null; // ローカルなど、直接アップロードが無い環境
   const json = await res.json();
+
+  if (res.status === 501) {
+    if (!json.filesApi) return null;
+    const uploaded = await putWithProgress("/api/uploads", file, onProgress);
+    return { fileName: uploaded.fileName };
+  }
   if (!res.ok) throw new Error(json.error ?? "アップロード先を用意できませんでした");
 
+  await putWithProgress(json.uploadUrl, file, onProgress);
+  return { storageUri: json.storageUri };
+}
+
+/** 大きな動画は進捗が見えないと固まったように見えるため、fetch ではなく XHR で送る */
+function putWithProgress(
+  url: string,
+  file: File,
+  onProgress: (percent: number | null) => void,
+): Promise<Record<string, string>> {
   onProgress(0);
-  await new window.Promise<void>((resolve, reject) => {
+  return new window.Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", json.uploadUrl);
+    xhr.open("PUT", url);
     xhr.setRequestHeader("content-type", file.type);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`動画をアップロードできませんでした (HTTP ${xhr.status})`));
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`動画をアップロードできませんでした (HTTP ${xhr.status})`));
+        return;
+      }
+      try {
+        resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {});
+      } catch {
+        resolve({}); // GCSはXMLを返す。本文は使わない
+      }
+    };
     xhr.onerror = () => reject(new Error("動画をアップロードできませんでした。通信状況を確かめてください"));
     xhr.send(file);
   });
-  return { storageUri: json.storageUri };
 }
 
 /** 尺と解像度をブラウザで測る。何コマ/秒で解析するかの判断に使う */

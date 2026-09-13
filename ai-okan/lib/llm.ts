@@ -73,7 +73,7 @@ async function callGoogle({ system, user, media, sources, schema, model }: Args,
   parts.push({ text: user });
 
   const response = await client(engine).models.generateContent({
-    model: model ?? process.env.DESIGNER_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    model: model ?? process.env.DESIGNER_MODEL ?? process.env.GEMINI_MODEL ?? defaultModel(engine),
     contents: [{ role: "user", parts }],
     config: {
       systemInstruction: system,
@@ -84,6 +84,17 @@ async function callGoogle({ system, user, media, sources, schema, model }: Args,
     },
   });
   return response.text ?? "";
+}
+
+/**
+ * エンジンごとの既定モデル。
+ *
+ * Gemini API キー方式では 2.5 系が新規ユーザーに提供されなくなっており、
+ * `gemini-2.5-flash` を指定すると 404（no longer available to new users）になる。
+ * Vertex AI 側は既存プロジェクトの設定（JUDGE_MODEL / DESIGNER_MODEL）をそのまま使うため触らない。
+ */
+function defaultModel(engine: "vertex" | "gemini"): string {
+  return engine === "vertex" ? "gemini-2.5-flash" : "gemini-3.6-flash";
 }
 
 async function callOpenAI({ system, user, media }: Args): Promise<string> {
