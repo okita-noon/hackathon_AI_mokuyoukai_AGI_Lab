@@ -38,7 +38,7 @@ export default function Home() {
           過去のデータをすべて読み込んだAIおかんが約束を結び、証拠を出すまで許しません。
         </p>
         <div className="flex flex-wrap items-center gap-4">
-          <Button onClick={() => router.push("/ingest")}>過去のデータを渡す</Button>
+          <Button onClick={() => router.push("/ingest")}>おかんに自分を知ってもらう</Button>
           <EngineBadge engine={engine} />
         </div>
       </section>
@@ -47,7 +47,7 @@ export default function Home() {
         <h2 className="border-l-8 border-accent pl-4 text-xl font-bold">やることは4つだけ</h2>
         <ol className="grid gap-4 sm:grid-cols-4">
           {[
-            { n: 1, t: "過去を渡す", d: "Gmail・X・LINEの履歴をそのまま投入します" },
+            { n: 1, t: "自分を知ってもらう", d: "Gmail・X・LINEの履歴をおかんに見せます" },
             { n: 2, t: "見立てを受ける", d: "AIが挫折のパターンを具体的に指摘します" },
             { n: 3, t: "約束を結ぶ", d: "期限・証拠・罰金を自分で決めて自分を縛ります" },
             { n: 4, t: "監視される", d: "提出した写真・動画をAIが判定します" },

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import pastSelf from "@/data/past-self.json";
-import { Button, Heading } from "./ui";
+import { Button, Heading, OkanBubble } from "./ui";
 
 const KIND: Record<string, string> = { gmail: "メール", x: "SNS投稿", line: "メッセージ" };
 
@@ -36,11 +36,23 @@ export function Ingest({
 
   return (
     <div className="space-y-8">
-      <Heading>過去のデータを渡す</Heading>
-      <p className="text-muted">
-        過去{total}件の履歴をAIおかんに渡します。Gmailのエクスポート、Xのアーカイブ、LINEのトーク履歴——
-        <span className="font-bold text-fg">いずれも実際にエクスポートできる形式</span>です。
-      </p>
+      <Heading>おかんに自分を知ってもらう</Heading>
+
+      <OkanBubble text="あんたのこと、まだ何も知らんからな。普段どんなこと言うてるんか、見せてみ。格好つけても、どうせすぐ分かるで。" />
+
+      <div className="rounded-xl border border-line bg-bg-soft p-5">
+        <p className="font-bold">見せた履歴は、次の画面での見立てに使われます</p>
+        <p className="mt-2 text-sm text-muted">
+          おかんは{total}件の履歴を時系列で突き合わせ、宣言と実績のズレから
+          <span className="font-bold text-fg">あなたが毎回どこで折れるのか</span>を割り出します。
+          ここで見せる量が多いほど、指摘は具体的になります。
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Gmailのエクスポート、Xのアーカイブ、LINEのトーク履歴——
+          <span className="font-bold text-fg">いずれも実際にエクスポートできる形式</span>です。
+          渡した履歴はこの端末のブラウザにだけ残り、サーバーには送られません。
+        </p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         {pastSelf.sources.map((s) => (
@@ -67,7 +79,7 @@ export function Ingest({
 
       <div className="space-y-2">
         <label htmlFor="extra" className="block text-sm font-bold">
-          補足があれば<span className="ml-2 bg-bg-soft px-2 py-0.5 text-xs font-normal text-muted">任意</span>
+          おかんに言うておきたいことがあれば<span className="ml-2 bg-bg-soft px-2 py-0.5 text-xs font-normal text-muted">任意</span>
         </label>
         <textarea
           id="extra"
@@ -89,7 +101,7 @@ export function Ingest({
           <p className="text-accent">…</p>
         </div>
       ) : (
-        <Button onClick={() => onDone(extra)}>AIおかんに渡す</Button>
+        <Button onClick={() => onDone(extra)}>これでおかんに見てもらう</Button>
       )}
     </div>
   );
