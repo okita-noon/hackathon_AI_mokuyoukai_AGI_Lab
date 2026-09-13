@@ -33,10 +33,29 @@ function normalize(value: Verdict): Verdict {
   };
 }
 
+/** DBがあるときだけ保存済みの約束を返す。DBに繋がらない場合は null */
+async function loadCommitment(id: string) {
+  try {
+    const user = await currentUser();
+    const stored = await pool.query(
+      `SELECT id, title, verification_rule, penalty_amount, deadline_at, status
+       FROM commitments WHERE id=$1 AND user_id=$2`,
+      [id, user.id],
+    );
+    const commitment = stored.rows[0];
+    if (!commitment) return "missing" as const;
+    if (!["ACTIVE", "GRACE"].includes(commitment.status)) return "closed" as const;
+    return commitment as Record<string, unknown>;
+  } catch (error) {
+    console.error("[verify:load]", error);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Body | null;
   const contract = validateContract(body?.promise);
-  if (!contract?.id) return NextResponse.json({ error: "保存済みの約束が必要です" }, { status: 400 });
+  if (!contract) return NextResponse.json({ error: "約束の内容が不正です" }, { status: 400 });
 
   const video = mediaInput(body?.video);
   const frames = Array.isArray(body?.frames)
@@ -47,31 +66,46 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "写真または8MB以下の動画を選んでください" }, { status: 413 });
   }
 
+  // DBがあれば保存済みの約束を正とし、無ければ画面から渡された約束をそのまま使う
+  const saved = contract.id ? await loadCommitment(contract.id) : null;
+  if (saved === "missing") return NextResponse.json({ error: "約束が見つかりません" }, { status: 404 });
+  if (saved === "closed") {
+    return NextResponse.json({ error: "この約束への提出は終了しています" }, { status: 409 });
+  }
+  const target = saved
+    ? {
+        goal: saved.title as string,
+        evidence: saved.verification_rule as string,
+        deadline: new Date(saved.deadline_at as string).toISOString(),
+        penalty: saved.penalty_amount as number,
+      }
+    : { goal: contract.goal, evidence: contract.evidence, deadline: contract.deadline, penalty: contract.penalty };
+
+  const engine = detectEngine();
+  const useVideo = (engine === "vertex" || engine === "gemini") && !!video;
+  const media = useVideo ? [video] : frames;
+  const kind = useVideo
+    ? "動画そのもの"
+    : frames.length > 1
+      ? `動画から抜き出した連続フレーム${frames.length}枚（時系列順）`
+      : "写真1枚";
+  const prompt = `${JUDGE_PROMPT}\n\n---- 提出されたもの ----\n${kind}\n\n---- 本人が結んだ約束 ----\n目標: ${target.goal}\n提出すべきエビデンス: ${target.evidence}\n期限: ${target.deadline}\n守れなかった場合の罰金: ${target.penalty}円`;
+  const generated = await generateJSON<Verdict>({ system: OKAN_CHARACTER, user: prompt, media });
+  let verdict = normalize(generated?.data ?? demoVerdictFor(totalSize));
+  const submitted = (video ?? frames[0])!;
+
+  if (!saved) {
+    // DBを使わない経路。判定は返すが、記録は残らない
+    return NextResponse.json({
+      ...verdict,
+      engine: generated?.engine ?? "demo",
+      analyzed: kind,
+      persisted: false,
+    });
+  }
+
   try {
     const user = await currentUser();
-    const stored = await pool.query(
-      `SELECT id, title, verification_rule, penalty_amount, deadline_at, status
-       FROM commitments WHERE id=$1 AND user_id=$2`,
-      [contract.id, user.id],
-    );
-    const commitment = stored.rows[0];
-    if (!commitment) return NextResponse.json({ error: "約束が見つかりません" }, { status: 404 });
-    if (!["ACTIVE", "GRACE"].includes(commitment.status)) {
-      return NextResponse.json({ error: "この約束への提出は終了しています" }, { status: 409 });
-    }
-
-    const engine = detectEngine();
-    const useVideo = (engine === "vertex" || engine === "gemini") && !!video;
-    const media = useVideo ? [video] : frames;
-    const kind = useVideo
-      ? "動画そのもの"
-      : frames.length > 1
-        ? `動画から抜き出した連続フレーム${frames.length}枚（時系列順）`
-        : "写真1枚";
-    const prompt = `${JUDGE_PROMPT}\n\n---- 提出されたもの ----\n${kind}\n\n---- DBに保存された約束 ----\n目標: ${commitment.title}\n提出すべきエビデンス: ${commitment.verification_rule}\n期限: ${new Date(commitment.deadline_at).toISOString()}\n守れなかった場合の罰金: ${commitment.penalty_amount}円`;
-    const generated = await generateJSON<Verdict>({ system: OKAN_CHARACTER, user: prompt, media });
-    let verdict = normalize(generated?.data ?? demoVerdictFor(totalSize));
-    const submitted = video ?? frames[0];
     const hash = createHash("sha256").update(submitted.base64).digest("hex");
     const duplicate = await pool.query(
       `SELECT 1 FROM proof_submissions p JOIN commitments c ON c.id=p.commitment_id
@@ -115,7 +149,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ...verdict, engine: generated?.engine ?? "demo", analyzed: kind, persisted: true });
   } catch (error) {
-    console.error("[verify]", error);
-    return NextResponse.json({ error: "判定結果を保存できませんでした" }, { status: 503 });
+    // 判定はできているので、保存に失敗しても結果は返す
+    console.error("[verify:persist]", error);
+    return NextResponse.json({
+      ...verdict,
+      engine: generated?.engine ?? "demo",
+      analyzed: kind,
+      persisted: false,
+    });
   }
 }

@@ -28,7 +28,7 @@ export async function GET() {
     return NextResponse.json({ engine: detectEngine(), state });
   } catch (error) {
     console.error("[okan:get]", error);
-    return NextResponse.json({ error: "保存した状態を読み込めませんでした" }, { status: 503 });
+    return NextResponse.json({ engine: detectEngine(), state: null, persisted: false });
   }
 }
 
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ profile, engine, state });
     } catch (error) {
       console.error("[okan:profile]", error);
-      return NextResponse.json({ error: "見立てを保存できませんでした" }, { status: 503 });
+      return NextResponse.json({ profile, engine, state: null, persisted: false });
     }
   }
 
@@ -89,7 +89,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ okan, engine, ...response });
     } catch (error) {
       console.error("[okan:promise]", error);
-      return NextResponse.json({ error: "約束を保存できませんでした" }, { status: 503 });
+      const local = { ...contract, id: null, deadlineAt: deadlineAt(contract.deadline).toISOString() };
+      return NextResponse.json({ okan, engine, contract: local, state: null, persisted: false });
     }
   }
 
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ okan, engine });
   } catch (error) {
     console.error("[okan:scold]", error);
-    return NextResponse.json({ error: "期限切れを記録できませんでした" }, { status: 409 });
+    return NextResponse.json({ okan, engine, persisted: false });
   }
 }
 
@@ -134,6 +135,6 @@ export async function DELETE() {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[okan:delete]", error);
-    return NextResponse.json({ error: "状態をリセットできませんでした" }, { status: 503 });
+    return NextResponse.json({ ok: true, persisted: false });
   }
 }
