@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { one, q } from "@/lib/db";
 import { env } from "@/lib/env";
-import { distanceMeters, getRemoteHash, isLargeMedia, readObject, sha256 } from "@/lib/storage";
+import { distanceMeters, isLargeMedia, readObject, sha256, statObject } from "@/lib/storage";
 import { judgeProof, type EvidenceType, type Geo } from "@/lib/ai/judge";
+import { MAX_EVIDENCE_BYTES, formatBytes, type MediaMeta } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // 動画判定は画像より時間がかかる
+// 動画はアップロード確認 → Gemini の前処理 → 解析と段階が多く、画像より桁で時間がかかる
+export const maxDuration = 300;
 
 /**
  * 証跡提出 → Gemini 判定 → DB保存 → 猶予タイマー設定 を1リクエストで行う。
@@ -16,7 +18,7 @@ export const maxDuration = 120; // 動画判定は画像より時間がかかる
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const { storage_uri, mime_type, note, geo, evidence_type } = await req.json();
+  const { storage_uri, mime_type, note, geo, evidence_type, media_meta } = await req.json();
 
   const c = await one<any>(
     `SELECT c.*, u.trust_score, u.id AS uid
@@ -30,15 +32,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   // 推奨は目標作成時にAIが決めるが、実際に何で出すかはユーザーの自由。
-  // 指定がなければ、届いたものから種類を推測する。
-  const evidenceType: EvidenceType = (["photo", "video", "audio", "gps"] as const).includes(evidence_type)
-    ? evidence_type
-    : mime_type?.startsWith("video/")
-      ? "video"
-      : mime_type?.startsWith("audio/")
-        ? "audio"
-        : storage_uri
-          ? "photo"
+  // 画面の選択より実物の MIME を優先する（動画を「写真」として判定させると、
+  // 判定AIが動画向けの観点で見なくなるため）。ファイルがないときだけ申告を使う。
+  const evidenceType: EvidenceType = mime_type?.startsWith("video/")
+    ? "video"
+    : mime_type?.startsWith("audio/")
+      ? "audio"
+      : storage_uri
+        ? "photo"
+        : (["photo", "video", "audio", "gps"] as const).includes(evidence_type)
+          ? evidence_type
           : "gps";
 
   if (evidenceType === "gps") {
@@ -55,6 +58,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   let hashSource = "sha256";
   let exif: Record<string, unknown> = {};
   let submittedGeo: Geo | null = null;
+  // 尺・解像度はブラウザが計測して送ってくる（サーバー側で動画をデコードしない）。
+  // 判定AIには「どこまでを何コマで見たか」を伝えるために使う。
+  const mediaMeta: MediaMeta = sanitizeMediaMeta(media_meta);
 
   // 位置情報は単独提出でも、写真・動画・音声への添付でも受け付ける
   if (typeof geo?.lat === "number" && typeof geo?.lng === "number") {
@@ -70,12 +76,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     hash = sha256(Buffer.from(`${geo.lat.toFixed(5)},${geo.lng.toFixed(5)}`));
     hashSource = "geo-sha256";
   } else if (isLargeMedia(mime_type) && String(storage_uri).startsWith("gs://")) {
-    // 動画・音声は Cloud Run に落とさず gs:// のまま Vertex AI に渡す
-    const remote = await getRemoteHash(storage_uri);
-    hash = remote?.hash ?? null;
-    hashSource = remote?.source ?? "none";
+    // 動画・音声は Cloud Run に落とさず gs:// のまま Vertex AI に渡す。
+    // 本体を読まない代わりに、メタデータだけで「本当に上がっているか」を必ず確かめる。
+    const remote = await statObject(storage_uri);
+    if (!remote || remote.sizeBytes === 0) {
+      return NextResponse.json(
+        { error: "アップロードが完了していません。通信状況を確認して、もう一度提出してください。" },
+        { status: 400 },
+      );
+    }
+    if (remote.sizeBytes > MAX_EVIDENCE_BYTES) {
+      return NextResponse.json({ error: tooLargeMessage(remote.sizeBytes) }, { status: 413 });
+    }
+    mediaMeta.size_bytes = remote.sizeBytes;
+    hash = remote.hash;
+    hashSource = remote.hashSource;
   } else {
     bytes = await readObject(storage_uri);
+    if (bytes.length > MAX_EVIDENCE_BYTES) {
+      return NextResponse.json({ error: tooLargeMessage(bytes.length) }, { status: 413 });
+    }
+    mediaMeta.size_bytes = bytes.length;
     hash = sha256(bytes);
     if (mime_type.startsWith("image/")) {
       try {
@@ -108,28 +129,40 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const submittedAt = new Date();
   const proof = await one<any>(
     `INSERT INTO proof_submissions
-       (commitment_id, storage_uri, mime_type, evidence_type, note, content_sha256, hash_source, exif, geo, submitted_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+       (commitment_id, storage_uri, mime_type, evidence_type, note, content_sha256, hash_source, exif, geo, media_meta, submitted_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [
       id, storage_uri ?? null, mime_type ?? null, evidenceType, note ?? null, hash, hashSource,
-      JSON.stringify(exif), submittedGeo ? JSON.stringify(submittedGeo) : null, submittedAt,
+      JSON.stringify(exif), submittedGeo ? JSON.stringify(submittedGeo) : null,
+      JSON.stringify(mediaMeta), submittedAt,
     ],
   );
 
-  const j = await judgeProof({
-    evidenceType,
-    recommendedEvidenceType: c.recommended_evidence_type ?? null,
-    verificationRule: c.verification_rule,
-    deadlineAt: new Date(c.deadline_at),
-    submittedAt,
-    note,
-    exif,
-    duplicateHashMatch,
-    trustScore: Number(c.trust_score),
-    file: evidenceType === "gps" ? null : { bytes, storageUri: storage_uri, mimeType: mime_type },
-    geo: submittedGeo,
-    targetGeo: c.target_geo ?? null,
-  });
+  // 判定に失敗したら未判定のまま返す。AIに証跡が渡らなかったケースを
+  // 「未達」として猶予期間に落とすと、見てもいない動画で課金に向かってしまう。
+  let j;
+  try {
+    j = await judgeProof({
+      evidenceType,
+      recommendedEvidenceType: c.recommended_evidence_type ?? null,
+      verificationRule: c.verification_rule,
+      deadlineAt: new Date(c.deadline_at),
+      submittedAt,
+      note,
+      exif,
+      duplicateHashMatch,
+      trustScore: Number(c.trust_score),
+      file: evidenceType === "gps" ? null : { bytes, storageUri: storage_uri, mimeType: mime_type, meta: mediaMeta },
+      geo: submittedGeo,
+      targetGeo: c.target_geo ?? null,
+    });
+  } catch (e: any) {
+    console.error("judge failed", { commitment_id: id, proof_id: proof.id, error: e?.message });
+    return NextResponse.json(
+      { error: e?.message ?? "判定に失敗しました。時間をおいて、もう一度提出してください。" },
+      { status: 502 },
+    );
+  }
 
   await q(
     `INSERT INTO judgement_logs
@@ -160,4 +193,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   return NextResponse.json({ judgement: j, duplicate_hash_match: duplicateHashMatch, exif, geo: submittedGeo });
+}
+
+function tooLargeMessage(sizeBytes: number): string {
+  return `ファイルが大きすぎます（${formatBytes(sizeBytes)}）。${formatBytes(MAX_EVIDENCE_BYTES)} 以内に収めてください。`;
+}
+
+/** ブラウザ由来の値なので、数値であることだけを保証して取り込む（判定の根拠にはしない補助情報） */
+function sanitizeMediaMeta(input: any): MediaMeta {
+  const num = (v: unknown, max: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, max) : null;
+  };
+  return {
+    duration_sec: num(input?.duration_sec, 24 * 3600),
+    width: num(input?.width, 100000),
+    height: num(input?.height, 100000),
+    size_bytes: num(input?.size_bytes, MAX_EVIDENCE_BYTES),
+  };
 }

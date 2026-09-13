@@ -101,7 +101,7 @@ gcloud run deploy "$SERVICE" \
   --source . --region "$REGION" --allow-unauthenticated \
   --service-account "$SA" \
   --add-cloudsql-instances "$CONN_NAME" \
-  --memory 1Gi --cpu 1 --timeout 120 --max-instances 5 \
+  --memory 1Gi --cpu 1 --timeout 300 --max-instances 5 \
   --set-env-vars "USE_VERTEX=1,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${VERTEX_LOCATION},STORAGE_DRIVER=gcs,GCS_BUCKET=${PROJECT_ID}-${SERVICE}-proofs,JUDGE_MODEL=${JUDGE_MODEL:-gemini-2.5-flash},ARBITER_MODEL=${ARBITER_MODEL:-gemini-2.5-pro},DESIGNER_MODEL=${DESIGNER_MODEL:-gemini-2.5-flash},GRACE_PERIOD_HOURS=${GRACE_PERIOD_HOURS:-24}" \
   --set-secrets "$RUN_SECRETS"
 

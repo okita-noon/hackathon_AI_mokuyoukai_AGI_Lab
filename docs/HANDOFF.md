@@ -83,7 +83,7 @@ res（条件が確定した場合）:
 { "phase": "PROPOSAL",
   "proposal": { "title": "毎朝5km走る", "verification_rule": "...",
                 "checklist": ["距離が5.0km以上と表示されている", "..."],
-                "evidence_type": "photo|screenshot|video",
+                "evidence_type": "photo|video|audio|gps",
                 "suggested_penalty_amount": 1000, "rationale": "..." } }
 ```
 `answers` が3件以上あると必ず PROPOSAL が返る（聞きすぎない設計）。所要 3〜8秒。
@@ -94,12 +94,16 @@ res 201: commitment 1件（上と同じ形、`last_judgement` なし）
 
 ### `POST /api/commitments/{id}/proof/upload-url`
 req: `{ mimeType: "image/jpeg" }` → res: `{ objectPath, uploadUrl, storageUri }`
-`uploadUrl` に `PUT`（`content-type` ヘッダ必須）でファイル本体を送る。
+`uploadUrl` に `PUT`（`content-type` ヘッダ必須）でファイル本体を送る。動画・音声も同じ導線で、
+`video/mp4` `video/quicktime` `video/webm` などを受け付ける（1ファイル200MBまで）。
 
 ### `POST /api/commitments/{id}/proof`
-req: `{ storage_uri, mime_type, note? }`
-res: `{ judgement: {...}, duplicate_hash_match: boolean, exif: {...} }`
-**同期でGeminiを呼ぶため 3〜10秒かかる。ローディングUIは必須。**
+req: `{ storage_uri, mime_type, note?, evidence_type?, geo?, media_meta? }`
+`media_meta` は動画・音声のとき `{ duration_sec, width, height, size_bytes }` を送る（ブラウザ計測）。
+尺が分かると、短い動画は密にサンプリングし、長い動画は解析範囲を先頭10分に切ってその旨をAIに伝える。
+res: `{ judgement: {...}, duplicate_hash_match: boolean, exif: {...}, geo: {...} }`
+**同期でGeminiを呼ぶため 3〜10秒（動画は 10〜60秒）かかる。ローディングUIは必須。**
+判定に失敗した場合は 502 + `{ error }` を返し、コミットメントの状態は変えない（未判定のまま再提出できる）。
 
 ### `POST /api/commitments/{id}/appeal`
 req: `{ statement: string /* 5文字以上 */ }` → res: `{ appeal_status: "UPHELD"|"DISMISSED", judgement }`

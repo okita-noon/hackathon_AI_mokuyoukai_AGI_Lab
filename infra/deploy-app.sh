@@ -22,8 +22,14 @@ gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 docker tag commitpay:ci "$IMAGE"
 docker push "$IMAGE"
 bash infra/migrate-cloud.sh
+# --timeout は動画判定（アップロード確認 → Gemini の前処理 → 解析）に必要な長さ。
+# GCS_BUCKET は動画の直接アップロード先。未設定だと動画は 8MB の base64 経路に落ちるため、
+# 毎回同じ値を入れ直す（--update-env-vars は指定した変数だけを更新する）。
+# ほかの環境変数・シークレット・接続設定は既存のまま維持する。
 gcloud run services update "$SERVICE" --region "$REGION" \
-  --image "$IMAGE" --no-traffic --tag candidate --update-labels "commit-sha=${GITHUB_SHA}"
+  --image "$IMAGE" --timeout 300 --no-traffic --tag candidate \
+  --update-env-vars "GCS_BUCKET=${PROJECT_ID}-${SERVICE}-proofs" \
+  --update-labels "commit-sha=${GITHUB_SHA}"
 REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
 CANDIDATE_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" \
   --format='value(status.traffic.url)')"

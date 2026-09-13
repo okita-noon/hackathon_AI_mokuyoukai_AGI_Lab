@@ -154,7 +154,19 @@ DB はこのプロジェクト専用の Compose ボリュームを使い、`loca
 | `/watch` | 写真・動画の提出、判定、モック罰金 |
 | `/api/okan` | 状態復元、見立て生成、約束・期限切れの記録 |
 | `/api/verify` | 写真・動画のAI判定と判定ログ保存 |
-| `/api/health` | Cloud SQL接続とAIエンジンの稼働確認 |
+| `/api/uploads` | 動画をCloud Storageへ直接アップロードする署名付きURL |
+| `/api/health` | Cloud SQL接続、AIエンジン、動画アップロード経路の確認 |
+
+### 動画の証拠
+
+「腕立て伏せを10回」のように回数を約束した場合、提出された動画の中で回数を数えて判定します。
+動画はブラウザから Cloud Storage へ直接アップロードし（Cloud Run のリクエスト上限を避けるため）、
+Vertex AI には `gs://` のURIをそのまま渡します。判定が終わったオブジェクトはその場で削除します。
+
+20秒以下の動画は10コマ/秒でサンプリングし、10分を超える分は解析しません。数えるのは往復回数だけで、フォームは採点しません。
+モデルが数えた回数が約束に届かない場合は、モデルが「達成」と言っても未達として扱います。
+`GCS_BUCKET` が無い環境では8MB以下の動画をそのまま送り、それも使えない場合は抜き出した静止画3枚で判定します
+（この経路では回数は数えられません）。詳細は [ai-okan/README.md](ai-okan/README.md) を参照してください。
 
 ## 開発・デモ
 
@@ -185,7 +197,7 @@ AIおかん固有の設計とデモ手順は [ai-okan/README.md](ai-okan/README.
 - **main への push（PR マージを含む）**: 同じ検証に成功した `ai-okan/` のイメージを Artifact Registry に保存し、本番 DB のスキーマ適用 → Cloud Run の新リビジョン作成 → `/api/health` でDB接続確認 → トラフィック切り替え。
 - **手動実行**: Actions の `Run workflow` で `main` を選択。ほかのブランチでは検証だけ実行します。
 
-デプロイ先は `ai-lab-okita2026` / `asia-northeast1` / `commitpay-agi-lab`。既存の環境変数・Secret Manager 参照・Cloud SQL 接続・実行サービスアカウントは維持します。イメージはコミット SHA で識別し、Actions の実行サマリーに公開 URL とリビジョンを記録します。
+デプロイ先は `ai-lab-okita2026` / `asia-northeast1` / `commitpay-agi-lab`。既存の環境変数・Secret Manager 参照・Cloud SQL 接続・実行サービスアカウントは維持します。リクエストタイムアウトは動画判定に合わせて 300 秒を設定します。イメージはコミット SHA で識別し、Actions の実行サマリーに公開 URL とリビジョンを記録します。
 
 main のパイプラインを直列化し、実行中のデプロイは新しい push で中断しません。GitHub Actions は待機中の実行を最新の実行に置き換えるため、連続 push は最新の main に集約される場合があります。古いコミットの再実行もデプロイ直前に除外します。
 

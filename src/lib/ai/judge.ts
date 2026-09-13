@@ -2,6 +2,8 @@ import { genaiClient } from "./client";
 import { env, CONFIDENCE_THRESHOLD } from "../env";
 import { JUDGEMENT_SCHEMA, type Judgement } from "./schema";
 import { ARBITER_SYSTEM_PROMPT, JUDGE_SYSTEM_PROMPT, sanitizeUserText } from "./prompts";
+import { isVideo, resolveMediaParts } from "./media";
+import { formatBytes, formatDuration, videoSampling, type MediaMeta } from "../media";
 
 export type EvidenceType = "photo" | "video" | "audio" | "gps";
 
@@ -20,7 +22,7 @@ export type JudgeInput = {
   duplicateHashMatch: boolean;
   trustScore: number;
   /** 位置情報のみの提出ではファイルがない */
-  file?: { bytes?: Buffer; storageUri?: string; mimeType: string } | null;
+  file?: { bytes?: Buffer; storageUri?: string | null; mimeType: string; meta?: MediaMeta | null } | null;
   geo?: Geo | null;
   targetGeo?: { lat: number; lng: number; radius_m: number; label?: string } | null;
 };
@@ -51,6 +53,24 @@ function buildContext(i: JudgeInput) {
     `duplicate_hash_match: ${i.duplicateHashMatch}`,
     `user_trust_score: ${i.trustScore}`,
   ];
+  if (i.file?.mimeType) {
+    facts.push(`media_mime_type: ${i.file.mimeType}`);
+    if (i.file.meta?.size_bytes) facts.push(`media_size: ${formatBytes(i.file.meta.size_bytes)}`);
+  }
+  if (i.file && isVideo(i.file.mimeType)) {
+    // 動画は「どこまでを何コマで見たか」をモデルに明示する。
+    // 切り詰めたことを伝えないと、映っていない後半を根拠に未達と判断しかねない。
+    const s = videoSampling(i.file.meta);
+    const meta = i.file.meta;
+    facts.push(`video_duration: ${formatDuration(meta?.duration_sec)}`);
+    if (meta?.width && meta?.height) facts.push(`video_resolution: ${meta.width}x${meta.height}`);
+    facts.push(`video_sampled_fps: ${s.fps}`);
+    facts.push(
+      s.truncated
+        ? `video_analyzed_range: 先頭 ${s.analyzedSeconds} 秒のみ（動画はこれより長い。解析範囲外の内容を根拠に未達と判断しないこと）`
+        : `video_analyzed_range: 全編`,
+    );
+  }
   if (i.targetGeo) {
     facts.push(`target_location: ${JSON.stringify(i.targetGeo)}`);
   }
@@ -79,17 +99,14 @@ ${facts.join("\n")}
 
 /**
  * 証跡をモデルに渡す part を組み立てる。
- * 動画・音声は数十MBになり得るので Cloud Run のメモリに載せず、Vertex AI に
- * gs:// URI をそのまま渡す（fileData）。画像は inlineData で送る。
+ * 経路の分岐（Vertexのgs:// / Files API / inlineData）は ai/media.ts に集約している。
+ * ファイルがあるはずなのに part が空になった場合は「証拠なし」で判定させず例外にする。
  */
-function evidenceParts(i: JudgeInput): any[] {
+async function evidenceParts(i: JudgeInput): Promise<any[]> {
   if (i.evidenceType === "gps" || !i.file) return [];
-  const { bytes, storageUri, mimeType } = i.file;
-  if (storageUri?.startsWith("gs://") && env.useVertex) {
-    return [{ fileData: { fileUri: storageUri, mimeType } }];
-  }
-  if (!bytes) return [];
-  return [{ inlineData: { mimeType, data: bytes.toString("base64") } }];
+  const parts = await resolveMediaParts(i.file);
+  if (!parts.length) throw new Error("証跡ファイルを判定AIに渡せませんでした。もう一度提出してください。");
+  return parts;
 }
 
 async function call(model: string, systemInstruction: string, text: string, parts: any[]): Promise<JudgeResult> {
@@ -140,11 +157,11 @@ function normalize(j: Judgement): Judgement {
   };
 }
 
-export function judgeProof(input: JudgeInput) {
-  return call(env.judgeModel, JUDGE_SYSTEM_PROMPT, buildContext(input), evidenceParts(input));
+export async function judgeProof(input: JudgeInput) {
+  return call(env.judgeModel, JUDGE_SYSTEM_PROMPT, buildContext(input), await evidenceParts(input));
 }
 
-export function arbitrate(input: JudgeInput & { firstJudgement: Judgement; appealText: string }) {
+export async function arbitrate(input: JudgeInput & { firstJudgement: Judgement; appealText: string }) {
   const text = `${buildContext(input)}
 
 <first_judgement>
@@ -154,5 +171,5 @@ ${JSON.stringify(input.firstJudgement)}
 <user_appeal>
 ${sanitizeUserText(input.appealText, 2000)}
 </user_appeal>`;
-  return call(env.arbiterModel, ARBITER_SYSTEM_PROMPT, text, evidenceParts(input));
+  return call(env.arbiterModel, ARBITER_SYSTEM_PROMPT, text, await evidenceParts(input));
 }

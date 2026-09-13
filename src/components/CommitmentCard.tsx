@@ -5,6 +5,15 @@ import VoiceInput from "./VoiceInput";
 import Countdown from "./Countdown";
 import JudgementDetails from "./JudgementDetails";
 import AudioRecorder from "./AudioRecorder";
+import {
+  MAX_ANALYZED_SECONDS,
+  MAX_EVIDENCE_BYTES,
+  formatBytes,
+  formatDuration,
+  videoSampling,
+  type MediaMeta,
+} from "@/lib/media";
+import { readMediaMeta, uploadWithProgress } from "@/lib/browser-media";
 
 export type Judgement = {
   status: string;
@@ -34,7 +43,11 @@ type EvidenceKey = "photo" | "video" | "audio" | "gps";
 
 const EVIDENCE: Record<EvidenceKey, { label: string; accept: string; hint: string }> = {
   photo: { label: "写真", accept: "image/*", hint: "カメラで撮影するか、写真を選んでください" },
-  video: { label: "動画", accept: "video/*", hint: "動作が最初から最後まで写るように撮影してください" },
+  video: {
+    label: "動画",
+    accept: "video/*",
+    hint: `動作が最初から最後まで写るように撮影してください。${Math.round(MAX_ANALYZED_SECONDS / 60)}分を超える分はAIが確認しません`,
+  },
   audio: { label: "音声", accept: "audio/*", hint: "その場で録音するか、音声ファイルを選べます" },
   gps: { label: "位置情報", accept: "", hint: "いまいる場所の座標を送ります" },
 };
@@ -63,6 +76,9 @@ export default function CommitmentCard({
   const [note, setNote] = useState("");
   const [appeal, setAppeal] = useState("");
   const [showAppeal, setShowAppeal] = useState(false);
+  // 動画は提出前に本人が中身を確認できるようにする（判定は課金に直結するため）
+  const [pending, setPending] = useState<{ file: File; url: string; meta: MediaMeta } | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const j = result ?? c.last_judgement;
@@ -94,29 +110,63 @@ export default function CommitmentCard({
     return d;
   };
 
-  const submitProof = async (file: File) => {
+  const clearPending = () => {
+    setPending((p) => {
+      if (p) URL.revokeObjectURL(p.url);
+      return null;
+    });
+  };
+
+  /**
+   * ファイルが選ばれたときの入口。
+   * 動画だけは即提出せず、尺・サイズを測ってプレビューを見せ、本人の確認を挟む。
+   */
+  const pickFile = async (file: File) => {
+    if (file.size > MAX_EVIDENCE_BYTES) {
+      alert(`ファイルが大きすぎます（${formatBytes(file.size)}）。${formatBytes(MAX_EVIDENCE_BYTES)} 以内にしてください。`);
+      return;
+    }
+    const meta = await readMediaMeta(file);
+    if (file.type.startsWith("video/")) {
+      clearPending();
+      setPending({ file, url: URL.createObjectURL(file), meta });
+      return;
+    }
+    submitProof(file, meta);
+  };
+
+  const submitProof = async (file: File, meta?: MediaMeta) => {
     try {
+      const mediaMeta = meta ?? (await readMediaMeta(file));
       let geo = null;
       if (attachGeo) {
         setBusy("現在地を取得しています...");
         geo = await getGeo();
       }
-      setBusy(`${evidence.label}をアップロード中...`);
+      setProgress(0);
+      setBusy(`${evidence.label}をアップロード中... 0%`);
       const t = await post(`/api/commitments/${c.id}/proof/upload-url`, { mimeType: file.type });
-      await fetch(t.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
-      setBusy(`AIが${evidence.label}を解析しています...`);
+      await uploadWithProgress(t.uploadUrl, file, (percent) => {
+        setProgress(percent);
+        setBusy(`${evidence.label}をアップロード中... ${percent}%`);
+      });
+      setProgress(null);
+      setBusy(`Geminiが${evidence.label}を解析しています...`);
       const d = await post(`/api/commitments/${c.id}/proof`, {
         storage_uri: t.storageUri,
         mime_type: file.type,
         evidence_type: mode,
         note,
         geo,
+        media_meta: mediaMeta,
       });
       setResult(d.judgement);
+      clearPending();
       onDone();
     } catch (e: any) {
       alert(e.message);
     } finally {
+      setProgress(null);
       setBusy(null);
     }
   };
@@ -196,7 +246,11 @@ export default function CommitmentCard({
             accept={evidence.accept}
             {...(mode === "photo" || mode === "video" ? { capture: "environment" as const } : {})}
             style={{ display: "none" }}
-            onChange={(e) => e.target.files?.[0] && submitProof(e.target.files[0])}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = ""; // 同じファイルを選び直せるようにする
+              if (f) pickFile(f);
+            }}
           />
           <label style={{ marginTop: 14 }}>証跡を提出する</label>
           <div className="chips">
@@ -205,7 +259,10 @@ export default function CommitmentCard({
                 type="button"
                 key={k}
                 className={"chip" + (mode === k ? " on" : "")}
-                onClick={() => setMode(k)}
+                onClick={() => {
+                  clearPending();
+                  setMode(k);
+                }}
               >
                 {EVIDENCE[k].label}
                 {k === c.recommended_evidence_type && " ・推奨"}
@@ -221,6 +278,28 @@ export default function CommitmentCard({
             推奨と違う種類でも提出できます。それだけで未達にはならず、条件を確認できない場合はAIが
             「何があれば判定できるか」を返します。
           </p>
+
+          {pending && (
+            <div className="preview">
+              <video src={pending.url} controls playsInline preload="metadata" />
+              <p className="muted" style={{ margin: 0 }}>
+                {formatDuration(pending.meta.duration_sec)}・{formatBytes(pending.meta.size_bytes)}
+                {pending.meta.width && pending.meta.height ? `・${pending.meta.width}x${pending.meta.height}` : ""}
+                {`・${videoSampling(pending.meta).fps}コマ/秒で解析`}
+              </p>
+              {videoSampling(pending.meta).truncated && (
+                <p className="warn" style={{ margin: 0, fontSize: 12 }}>
+                  長いため、先頭 {Math.round(MAX_ANALYZED_SECONDS / 60)} 分だけをAIが確認します。
+                  達成が分かる場面が後半にある場合は、その部分を切り出して提出してください。
+                </p>
+              )}
+              {progress !== null && (
+                <div className="progress" aria-label="アップロード進捗">
+                  <span style={{ width: `${progress}%` }} />
+                </div>
+              )}
+            </div>
+          )}
 
           {mode !== "gps" && (
             <label className="toggle">
@@ -243,9 +322,18 @@ export default function CommitmentCard({
                   {busy ?? "ファイルを選ぶ"}
                 </button>
               </>
+            ) : pending ? (
+              <>
+                <button disabled={!!busy} onClick={() => submitProof(pending.file, pending.meta)}>
+                  {busy ?? "この動画で判定してもらう"}
+                </button>
+                <button className="ghost" disabled={!!busy} onClick={clearPending}>
+                  選び直す
+                </button>
+              </>
             ) : (
               <button disabled={!!busy} onClick={() => fileRef.current?.click()}>
-                {busy ?? `${evidence.label}を提出する`}
+                {busy ?? (mode === "video" ? "動画を撮る・選ぶ" : `${evidence.label}を提出する`)}
               </button>
             )}
             {c.status === "GRACE" && !c.appeal_status && !showAppeal && (

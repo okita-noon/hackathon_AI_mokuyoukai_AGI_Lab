@@ -14,6 +14,10 @@ export type Verdict = {
   whatISee: string;
   okan: string;
   score: number;
+  /** 動画で数えられた完了回数。回数が条件でない、または数えられなかったときは null */
+  counted?: number | null;
+  /** 約束の文面から読み取った必要回数。counted と突き合わせて画面に出す */
+  required?: number | null;
 };
 
 export type Promise = {

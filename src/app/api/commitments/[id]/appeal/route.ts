@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { one, q } from "@/lib/db";
-import { readObject } from "@/lib/storage";
 import { arbitrate } from "@/lib/ai/judge";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300; // 動画を読み直しての再判定を含む
 
 /** 異議申し立て → 調停AI(Arbiter)が再判定。認容されればペナルティは執行されない */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -48,32 +47,44 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ appeal_status: "DISMISSED", reason: "証拠が提出されていません" });
   }
 
-  // 画像だけ本体を読み戻す。動画・音声は gs:// のまま Vertex AI に渡す
-  const isImage = String(proof.mime_type ?? "").startsWith("image/");
-  const bytes = isImage && proof.storage_uri ? await readObject(proof.storage_uri) : undefined;
-  const a = await arbitrate({
-    evidenceType: proof.evidence_type ?? "photo",
-    recommendedEvidenceType: c.recommended_evidence_type ?? null,
-    verificationRule: c.verification_rule,
-    deadlineAt: new Date(c.deadline_at),
-    submittedAt: new Date(proof.submitted_at),
-    note: proof.note,
-    exif: proof.exif,
-    duplicateHashMatch: false,
-    trustScore: Number(c.trust_score),
-    file: proof.storage_uri ? { bytes, storageUri: proof.storage_uri, mimeType: proof.mime_type } : null,
-    geo: proof.geo ?? null,
-    targetGeo: c.target_geo ?? null,
-    firstJudgement: {
-      status: first?.status ?? "REJECTED",
-      confidence_score: Number(first?.confidence_score ?? 1),
-      reasoning: first?.reasoning ?? "証拠未提出",
-      detected_elements: first?.detected_elements ?? [],
-      suspicious_indicators: first?.suspicious_indicators ?? [],
-      appeal_recommended: true,
-    },
-    appealText: String(statement),
-  });
+  // 証跡の受け渡し方（gs:// 直渡し / Files API / inline）は ai/media.ts が storage_uri から決める。
+  // 動画の読み込みに失敗し得るので、失敗したら審理前の状態に戻して申し立て直せるようにする。
+  let a;
+  try {
+    a = await arbitrate({
+      evidenceType: proof.evidence_type ?? "photo",
+      recommendedEvidenceType: c.recommended_evidence_type ?? null,
+      verificationRule: c.verification_rule,
+      deadlineAt: new Date(c.deadline_at),
+      submittedAt: new Date(proof.submitted_at),
+      note: proof.note,
+      exif: proof.exif,
+      duplicateHashMatch: false,
+      trustScore: Number(c.trust_score),
+      file: proof.storage_uri
+        ? { storageUri: proof.storage_uri, mimeType: proof.mime_type, meta: proof.media_meta ?? null }
+        : null,
+      geo: proof.geo ?? null,
+      targetGeo: c.target_geo ?? null,
+      firstJudgement: {
+        status: first?.status ?? "REJECTED",
+        confidence_score: Number(first?.confidence_score ?? 1),
+        reasoning: first?.reasoning ?? "証拠未提出",
+        detected_elements: first?.detected_elements ?? [],
+        suspicious_indicators: first?.suspicious_indicators ?? [],
+        appeal_recommended: true,
+      },
+      appealText: String(statement),
+    });
+  } catch (e: any) {
+    console.error("arbitration failed", { commitment_id: id, appeal_id: appeal.id, error: e?.message });
+    await q(`DELETE FROM appeals WHERE id=$1`, [appeal.id]);
+    await q(`UPDATE commitments SET status='GRACE', updated_at=now() WHERE id=$1`, [id]);
+    return NextResponse.json(
+      { error: e?.message ?? "再判定に失敗しました。時間をおいて、もう一度お試しください。" },
+      { status: 502 },
+    );
+  }
 
   const log = await one<any>(
     `INSERT INTO judgement_logs
