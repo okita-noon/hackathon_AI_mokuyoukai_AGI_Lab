@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import pastSelf from "@/data/past-self.json";
+import pastSelf from "@/data/usutaku.json";
 import { currentUser, saveState, withTransaction } from "@/lib/backend/db";
 import { deadlineAt, validateContract } from "@/lib/backend/contract";
 import { generateJSON, detectEngine } from "@/lib/llm";

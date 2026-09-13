@@ -1,0 +1,42 @@
+{
+  "owner": "usutaku（臼井拓水）",
+  "note": "インターネット上で公開されている情報のみを収集したもの。非公開のメールやメッセージは含まない。",
+  "sources": [
+    {
+      "id": "profile",
+      "label": "公開プロフィール",
+      "note": "本人サイト・各SNSの自己紹介",
+      "items": [
+        { "date": "2023-01", "text": "ChatGPTと出会い、AI情報の発信を開始したと本人が語っている", "url": "https://www.youtube.com/watch?v=oVllEDllMEQ", "confirmed": false },
+        { "date": "", "text": "国際基督教大学(ICU)在学中にPKSHA CapitalでアソシエイトとしてAI領域に関わる", "url": "https://www.youtube.com/watch?v=bHD0YDk3cGk", "confirmed": true },
+        { "date": "", "text": "新卒でAmazonに入社。その後AI受託開発のベンチャーを起業し、株式を譲渡", "url": "https://www.youtube.com/watch?v=oVllEDllMEQ", "confirmed": true },
+        { "date": "", "text": "法人向けAI研修・DXコンサルを行うMichikusa株式会社を一人で創業し代表を務める", "url": "https://www.usutaku.ai/", "confirmed": true },
+        { "date": "", "text": "デジタルハリウッド大学 特任准教授。NewsPicksプロピッカー、Schoo講師としても活動", "url": "https://www.instagram.com/usutaku_copilot/", "confirmed": true }
+      ]
+    },
+    {
+      "id": "sns",
+      "label": "SNS発信",
+      "note": "YouTube / X / Instagram / TikTok",
+      "items": [
+        { "date": "", "text": "Instagram「今すぐ使えるAI仕事術を発信」フォロワー約32.5万人", "url": "https://www.instagram.com/usutaku_copilot/", "confirmed": true },
+        { "date": "", "text": "X「usutaku@AI情報解説」でAIニュースの解説を継続的に投稿", "url": "https://twitter.com/usutaku_com", "confirmed": true },
+        { "date": "", "text": "TikTokで「AIに仕事を奪われないためにはAIを使いこなす人材になる必要がある」と発信", "url": "https://www.tiktok.com/@usutaku4/video/7343648425096793362", "confirmed": true },
+        { "date": "", "text": "ChatGPTの課金プラン・データ分析・Web検索など、実務で使える機能の解説を反復して発信", "url": "https://www.tiktok.com/@usutaku4/video/7343648425096793362", "confirmed": true },
+        { "date": "2024-07", "text": "YouTube「【SNS30万人越え】新卒Amazonから生成AI起業したusutakuの全て」公開", "url": "https://www.youtube.com/watch?v=oVllEDllMEQ", "confirmed": false },
+        { "date": "2024-11", "text": "YouTube「【1日密着】休みなしのAI起業家の1日が過酷すぎる」公開", "url": "https://www.youtube.com/watch?v=ok0I0-_3BjU", "confirmed": false },
+        { "date": "", "text": "YouTube「【AI発信で日本一】学生時代から淡々と“手を挙げ続けた”から今がある」に出演", "url": "https://www.youtube.com/watch?v=bHD0YDk3cGk", "confirmed": true }
+      ]
+    },
+    {
+      "id": "works",
+      "label": "書籍・仕事",
+      "note": "出版・研修",
+      "items": [
+        { "date": "", "text": "書籍『Notion AIハック 仕事と暮らしを劇的にラクにする72の最強アイデア』を執筆", "url": "https://www.amazon.co.jp/dp/4798183164", "confirmed": true },
+        { "date": "", "text": "法人向けにChatGPT・Copilot for Microsoft 365の研修を提供", "url": "https://www.usutaku.ai/", "confirmed": true },
+        { "date": "", "text": "「AIを導入した会社では大規模なリストラも起きている」と危機感を繰り返し提示", "url": "https://www.tiktok.com/@usutaku4/video/7343648425096793362", "confirmed": true }
+      ]
+    }
+  ]
+}

@@ -26,15 +26,24 @@ export type Promise = {
   status?: "ACTIVE" | "APPROVED" | "REJECTED" | "UNCERTAIN" | "PENALIZED";
 };
 
+export type SourceItem = {
+  /** 公開日。確認できなかったものは空文字 */
+  date: string;
+  text: string;
+  /** 出典URL */
+  url?: string;
+  /** 日付や内容の裏が取れているか */
+  confirmed?: boolean;
+};
+
 export type Source = {
   id: string;
   label: string;
   note: string;
-  count: number;
-  items: { date: string; text: string }[];
+  items: SourceItem[];
 };
 
-export type PastSelf = { owner: string; sources: Source[] };
+export type PastSelf = { owner: string; note?: string; sources: Source[] };
 
 /** AIが実際に呼ばれたのか、フェイルセーフで返したのかを画面に出すための印 */
 export type Engine = "vertex" | "gemini" | "openai" | "demo";
