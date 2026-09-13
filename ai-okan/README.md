@@ -48,9 +48,10 @@ APIキー方式では 2.5 系（`gemini-2.5-flash` / `gemini-2.5-pro`）が新�
 指定すると 404（no longer available to new users）になる。`DESIGNER_MODEL` などで明示的に上書きしないこと。
 Vertex AI 側は既存プロジェクトの設定をそのまま使う。
 
-**無料枠は1モデルあたり1日20リクエストまで**。動作確認を繰り返すとすぐ上限に当たり、
-判定は 502（「AIの利用上限に達しました」）になる。人前で回すときは Vertex AI（本番）か、
-課金を有効にしたキーを使う。
+キーの課金が有効でない場合、**無料枠は1モデルあたり1日20リクエスト**で、動作確認を繰り返すと
+すぐ上限に当たって判定が 502（「AIの利用上限に達しました」）になる。
+キーの発行元プロジェクトで課金を有効にすれば上限は実質なくなる（[AI Studio](https://aistudio.google.com/apikey) の
+該当キーの行から設定できる）。本番の Vertex AI は元から無料枠の制限を受けない。
 
 Cloud Run では `USE_VERTEX=1`、`GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATION` を使い、サービスアカウント経由で Vertex AI に接続する。
 
