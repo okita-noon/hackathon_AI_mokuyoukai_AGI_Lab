@@ -223,3 +223,12 @@ ALTER TABLE proof_submissions
 -- JSONB にすることで、画面の状態追加をDBマイグレーションなしで安全に拡張できる。
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS ai_okan_state JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- AIおかん: 罰金を Stripe Checkout で払う。
+--   期限切れ時に REQUIRES_ACTION で請求を作り、支払いが確認できたら SUCCEEDED にする。
+--   STRIPE_SECRET_KEY が無い環境では従来どおり MOCKED で記録する。
+-- 'stripe'（保存カードへの自動課金） | 'stripe_checkout' | 'mock'
+ALTER TABLE penalty_transactions ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'stripe';
+ALTER TABLE penalty_transactions ADD COLUMN IF NOT EXISTS stripe_checkout_session_id TEXT;
+ALTER TABLE penalty_transactions ADD COLUMN IF NOT EXISTS payment_url TEXT;
+ALTER TABLE penalty_transactions ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
