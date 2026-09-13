@@ -17,10 +17,13 @@ export type Verdict = {
 };
 
 export type Promise = {
+  id?: string;
   goal: string;
   deadline: string;
+  deadlineAt?: string;
   evidence: string;
   penalty: number;
+  status?: "ACTIVE" | "APPROVED" | "REJECTED" | "UNCERTAIN" | "PENALIZED";
 };
 
 export type Source = {
@@ -34,4 +37,13 @@ export type Source = {
 export type PastSelf = { owner: string; sources: Source[] };
 
 /** AIが実際に呼ばれたのか、フェイルセーフで返したのかを画面に出すための印 */
-export type Engine = "gemini" | "openai" | "demo";
+export type Engine = "vertex" | "gemini" | "openai" | "demo";
+
+export type AppState = {
+  step: number;
+  profile: Profile | null;
+  engine: Engine | null;
+  contract: Promise | null;
+  promiseReply: string | null;
+  promiseEngine: Engine | null;
+};

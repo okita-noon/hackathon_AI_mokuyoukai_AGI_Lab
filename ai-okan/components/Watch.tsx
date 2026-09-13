@@ -18,6 +18,7 @@ export function Watch({ contract, onReset }: Props) {
   const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string }) | null>(null);
   const [scold, setScold] = useState<{ okan: string; engine: Engine } | null>(null);
   const [busy, setBusy] = useState<"judge" | "scold" | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function judge(file: File) {
@@ -25,6 +26,7 @@ export function Watch({ contract, onReset }: Props) {
     const dataUrl = await toDataUrl(file);
     setPreview({ url: dataUrl, isVideo });
     setVerdict(null);
+    setError(null);
     setBusy("judge");
     try {
       // 動画はブラウザ側でコマを抜き出しておく。動画を扱えないモデルでも判定できるようにするため
@@ -42,7 +44,11 @@ export function Watch({ contract, onReset }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ video, frames, promise: contract }),
       });
-      setVerdict(await res.json());
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "証拠を判定できませんでした");
+      setVerdict(json);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "証拠を判定できませんでした");
     } finally {
       setBusy(null);
     }
@@ -50,13 +56,18 @@ export function Watch({ contract, onReset }: Props) {
 
   async function timeUp() {
     setBusy("scold");
+    setError(null);
     try {
       const res = await fetch("/api/okan", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ mode: "scold", promise: contract }),
       });
-      setScold(await res.json());
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "期限切れを記録できませんでした");
+      setScold(json);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "期限切れを記録できませんでした");
     } finally {
       setBusy(null);
     }
@@ -140,6 +151,7 @@ export function Watch({ contract, onReset }: Props) {
               {busy === "scold" ? "…" : "期限切れにする（デモ用）"}
             </Button>
           </div>
+          {error && <p role="alert" className="text-sm font-bold text-danger">{error}</p>}
         </div>
 
         <div className="min-h-56">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Profile, Promise as Contract, Engine } from "@/lib/types";
+import type { AppState as State, Promise as Contract, Engine } from "@/lib/types";
 import { Button, EngineBadge, OkanFace, StepDots } from "@/components/ui";
 import { Ingest } from "@/components/Ingest";
 import { Dossier } from "@/components/Dossier";
@@ -9,15 +9,6 @@ import { PromiseForm } from "@/components/PromiseForm";
 import { Watch } from "@/components/Watch";
 
 const STORE_KEY = "ai-okan-state-v1";
-
-type State = {
-  step: number;
-  profile: Profile | null;
-  engine: Engine | null;
-  contract: Contract | null;
-  promiseReply: string | null;
-  promiseEngine: Engine | null;
-};
 
 const INITIAL: State = {
   step: 0,
@@ -32,16 +23,28 @@ export default function Page() {
   const [s, setS] = useState<State>(INITIAL);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // 状態はブラウザだけに置く。サーバーもDBも持たない
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORE_KEY);
-      if (saved) setS(JSON.parse(saved));
-    } catch {
-      /* 壊れてたら初期状態で始める */
-    }
-    setReady(true);
+    fetch("/api/okan", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("server state unavailable");
+        const json = await response.json();
+        if (json.state) setS({ ...INITIAL, ...json.state });
+        else {
+          const saved = localStorage.getItem(STORE_KEY);
+          if (saved) setS({ ...INITIAL, ...JSON.parse(saved) });
+        }
+      })
+      .catch(() => {
+        try {
+          const saved = localStorage.getItem(STORE_KEY);
+          if (saved) setS({ ...INITIAL, ...JSON.parse(saved) });
+        } catch {
+          /* 壊れたローカル状態は使わない */
+        }
+      })
+      .finally(() => setReady(true));
   }, []);
 
   useEffect(() => {
@@ -50,6 +53,7 @@ export default function Page() {
 
   async function buildProfile(extra: string) {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch("/api/okan", {
         method: "POST",
@@ -57,7 +61,10 @@ export default function Page() {
         body: JSON.stringify({ mode: "profile", extra }),
       });
       const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "見立てを作成できませんでした");
       setS((p) => ({ ...p, profile: json.profile, engine: json.engine, step: 2 }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "見立てを作成できませんでした");
     } finally {
       setBusy(false);
     }
@@ -65,6 +72,7 @@ export default function Page() {
 
   async function makePromise(contract: Contract) {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch("/api/okan", {
         method: "POST",
@@ -72,12 +80,15 @@ export default function Page() {
         body: JSON.stringify({ mode: "promise", promise: contract }),
       });
       const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "約束を保存できませんでした");
       setS((p) => ({
         ...p,
-        contract,
+        contract: json.contract ?? contract,
         promiseReply: json.okan,
         promiseEngine: json.engine,
       }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "約束を保存できませんでした");
     } finally {
       setBusy(false);
     }
@@ -85,6 +96,8 @@ export default function Page() {
 
   function reset() {
     setS(INITIAL);
+    localStorage.removeItem(STORE_KEY);
+    fetch("/api/okan", { method: "DELETE" }).catch(() => undefined);
   }
 
   if (!ready) return null;
@@ -98,6 +111,8 @@ export default function Page() {
         </button>
         {s.step > 0 && <StepDots step={s.step} />}
       </div>
+
+      {error && <p role="alert" className="mb-6 rounded-xl border-2 border-danger bg-white p-4 font-bold text-danger">{error}</p>}
 
       {s.step === 0 && <Intro onStart={() => setS((p) => ({ ...p, step: 1 }))} />}
       {s.step === 1 && <Ingest busy={busy} onDone={buildProfile} />}
@@ -122,7 +137,7 @@ export default function Page() {
       <footer className="mt-16 border-t border-line pt-6 text-xs text-muted">
         <p>ハッカソン20260913 / AI木曜会 × AGI Lab</p>
         <p className="mt-1">
-          入力した内容はこの端末のブラウザにだけ保存されます。サーバーには残りません。
+          約束と判定結果は、デモユーザーの記録としてサーバーに保存されます。
         </p>
       </footer>
     </main>

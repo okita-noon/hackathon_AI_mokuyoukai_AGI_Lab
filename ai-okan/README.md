@@ -26,6 +26,14 @@ npm install
 npm run dev
 ```
 
+PostgreSQL を起動し、ルートの `db/schema.sql` を適用してからアプリを起動する。
+
+```bash
+docker compose -f ../docker-compose.yml up -d --wait db
+cd .. && npm run db:migrate && cd ai-okan
+DATABASE_URL=postgresql://commitpay:commitpay@localhost:55432/commitpay_agi_lab npm run dev
+```
+
 APIキーなしでも4ステップすべて動く（**デモモード**＝固定応答へのフェイルセーフ）。
 実際のAIで動かす場合は `.env.local` に以下のどちらかを置く。
 
@@ -34,6 +42,8 @@ GEMINI_API_KEY=...    # 優先。gemini-2.5-flash
 # または
 OPENAI_API_KEY=...    # gpt-4o-mini
 ```
+
+Cloud Run では `USE_VERTEX=1`、`GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATION` を使い、サービスアカウント経由で Vertex AI に接続する。
 
 画面右上のバッジに、**実AIで生成したのか固定応答なのか**が常に表示される。
 
@@ -44,11 +54,12 @@ OPENAI_API_KEY=...    # gpt-4o-mini
 | `app/page.tsx` | 4ステップの状態遷移 |
 | `app/api/okan/` | 人物プロファイル生成・約束への返答・説教 |
 | `app/api/verify/` | 提出された写真・動画がエビデンスとして妥当かの判定 |
-| `lib/llm.ts` | Gemini / OpenAI / デモモードの吸収層 |
+| `lib/llm.ts` | Vertex AI / Gemini / OpenAI / デモモードの吸収層 |
+| `lib/backend/` | Cloud SQL 接続、約束の検証・期限変換 |
 | `data/past-self.json` | 過去2年分のサンプル履歴 36件 |
 | `docs/superpowers/specs/` | 設計書 |
 
-状態は localStorage のみ。DB・認証・サーバー側の永続化は持たない。
+約束、判定ログ、罰金のモック記録、画面の復元状態は PostgreSQL に保存する。ハッカソン用の固定デモユーザーを使い、認証は持たない。localStorage はDBが一時的に読めない場合の表示用キャッシュとして使う。提出画像・動画の実データは保存せず、重複判定用の SHA-256 とメタデータだけを残す。
 
 ## 動画の扱い
 

@@ -26,7 +26,6 @@ export function Ingest({
       "宣言と実績の差分を計算中…",
       "AIおかんが目を通しています…",
     ];
-    setLog([]);
     let i = 0;
     const t = setInterval(() => {
       setLog((prev) => (i < lines.length ? [...prev, lines[i++]] : prev));
@@ -89,7 +88,7 @@ export function Ingest({
           <p className="text-accent">…</p>
         </div>
       ) : (
-        <Button onClick={() => onDone(extra)}>AIおかんに渡す</Button>
+        <Button onClick={() => { setLog([]); onDone(extra); }}>AIおかんに渡す</Button>
       )}
     </div>
   );

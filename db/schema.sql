@@ -209,3 +209,8 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 写真や動画に位置情報を添えて出せるようにするため、target_geo は種類に依存しない
+
+-- AIおかん: 4ステップの進行状態をサーバー側で復元する。
+-- JSONB にすることで、画面の状態追加をDBマイグレーションなしで安全に拡張できる。
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS ai_okan_state JSONB NOT NULL DEFAULT '{}'::jsonb;

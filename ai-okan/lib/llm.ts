@@ -1,111 +1,94 @@
+import { GoogleGenAI } from "@google/genai";
 import type { Engine } from "./types";
 
 const TIMEOUT_MS = 25_000;
+let googleClient: GoogleGenAI | null = null;
 
 export function detectEngine(): Engine {
-  if (process.env.GEMINI_API_KEY) return "gemini";
+  if (process.env.USE_VERTEX === "1" && process.env.GOOGLE_CLOUD_PROJECT) return "vertex";
+  if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) return "gemini";
   if (process.env.OPENAI_API_KEY) return "openai";
   return "demo";
 }
 
 export type MediaInput = { mimeType: string; base64: string };
 
-type Args = {
-  system: string;
-  user: string;
-  media?: MediaInput[];
-};
+type Args = { system: string; user: string; media?: MediaInput[] };
 
-/**
- * JSONを返させる共通入口。
- * 失敗・タイムアウト・キー未設定はすべて null を返し、呼び出し側がデモ応答に落とす。
- * デモ本番でAPIが落ちても画面が止まらないようにするための設計。
- */
 export async function generateJSON<T>(args: Args): Promise<{ data: T; engine: Engine } | null> {
   const engine = detectEngine();
   if (engine === "demo") return null;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const raw =
-      engine === "gemini"
-        ? await callGemini(args, controller.signal)
-        : await callOpenAI(args, controller.signal);
+    const raw = await withTimeout(
+      engine === "vertex" || engine === "gemini" ? callGoogle(args, engine) : callOpenAI(args),
+    );
     const data = parseJSON<T>(raw);
     return data ? { data, engine } : null;
-  } catch (e) {
-    console.error("[llm] failed:", e);
+  } catch (error) {
+    console.error("[llm] failed:", error);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-async function callGemini({ system, user, media }: Args, signal: AbortSignal): Promise<string> {
-  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+function client(engine: "vertex" | "gemini") {
+  if (googleClient) return googleClient;
+  googleClient = engine === "vertex"
+    ? new GoogleGenAI({
+        vertexai: true,
+        project: process.env.GOOGLE_CLOUD_PROJECT,
+        location: process.env.GOOGLE_CLOUD_LOCATION ?? "us-central1",
+      })
+    : new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY });
+  return googleClient;
+}
+
+async function callGoogle({ system, user, media }: Args, engine: "vertex" | "gemini") {
   const parts: Record<string, unknown>[] = [{ text: user }];
-  // Geminiは画像も動画も inlineData で同じように受け取れる
-  for (const m of media ?? []) {
-    parts.push({ inlineData: { mimeType: m.mimeType, data: m.base64 } });
+  for (const item of media ?? []) {
+    parts.push({ inlineData: { mimeType: item.mimeType, data: item.base64 } });
   }
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: "POST",
-      signal,
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": process.env.GEMINI_API_KEY!,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 1 },
-      }),
-    },
-  );
-  if (!res.ok) throw new Error(`gemini ${res.status}: ${await res.text()}`);
-  const json = await res.json();
-  return json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+  const response = await client(engine).models.generateContent({
+    model: process.env.DESIGNER_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    contents: [{ role: "user", parts }],
+    config: { systemInstruction: system, responseMimeType: "application/json", temperature: 0.5 },
+  });
+  return response.text ?? "";
 }
 
-async function callOpenAI({ system, user, media }: Args, signal: AbortSignal): Promise<string> {
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+async function callOpenAI({ system, user, media }: Args): Promise<string> {
   const content: Record<string, unknown>[] = [{ type: "text", text: user }];
-  // OpenAIのChat Completionsは動画を受け取れないため、画像だけを渡す
-  for (const m of media ?? []) {
-    if (!m.mimeType.startsWith("image/")) continue;
-    content.push({
-      type: "image_url",
-      image_url: { url: `data:${m.mimeType};base64,${m.base64}` },
-    });
+  for (const item of media ?? []) {
+    if (item.mimeType.startsWith("image/")) {
+      content.push({ type: "image_url", image_url: { url: `data:${item.mimeType};base64,${item.base64}` } });
+    }
   }
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    signal,
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
+    headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content },
-      ],
+      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      messages: [{ role: "system", content: system }, { role: "user", content }],
       response_format: { type: "json_object" },
-      temperature: 1,
+      temperature: 0.5,
     }),
   });
-  if (!res.ok) throw new Error(`openai ${res.status}: ${await res.text()}`);
-  const json = await res.json();
+  if (!response.ok) throw new Error(`openai ${response.status}: ${await response.text()}`);
+  const json = await response.json();
   return json?.choices?.[0]?.message?.content ?? "";
 }
 
-/** モデルが```json で包んできても拾えるようにする */
+async function withTimeout<T>(request: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("LLM request timed out")), TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function parseJSON<T>(raw: string): T | null {
   if (!raw) return null;
   const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
