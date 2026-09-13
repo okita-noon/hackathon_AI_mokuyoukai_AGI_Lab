@@ -218,3 +218,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- ============================================================
 ALTER TABLE proof_submissions
   ADD COLUMN IF NOT EXISTS media_meta JSONB;
+
+-- AIおかん: 4ステップの進行状態をサーバー側で復元する。
+-- JSONB にすることで、画面の状態追加をDBマイグレーションなしで安全に拡張できる。
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS ai_okan_state JSONB NOT NULL DEFAULT '{}'::jsonb;

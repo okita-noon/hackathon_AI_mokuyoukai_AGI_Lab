@@ -1,8 +1,8 @@
-# CommitPay — AI木曜会 / AGI Lab
+# AIおかん — AI木曜会 / AGI Lab
 
-**公開環境**: [CommitPay](https://commitpay-agi-lab-921302036612.asia-northeast1.run.app)（Cloud Run / asia-northeast1）
+**公開環境**: [AIおかん](https://commitpay-agi-lab-921302036612.asia-northeast1.run.app)（Cloud Run / asia-northeast1）
 
-目標を宣言し、写真・動画・音声・位置情報の証跡を提出すると、Gemini が達成状況を判定するハッカソン向けアプリです。動画は尺と解析範囲を明示したうえでフレーム単位で確認します。未達時は猶予期間と異議申し立てを経て、Stripe のペナルティ処理を行います。
+過去の行動パターンを読んだ「AIおかん」と約束を結び、写真・動画の証拠を提出するハッカソン向けアプリです。`ai-okan/` がデプロイ対象で、API RouteからVertex AIと既存のCloud SQLへ接続します。
 
 [google-mini-hackathon](https://github.com/okita-noon/google-mini-hackathon) のコミット [`cb04df5`](https://github.com/okita-noon/google-mini-hackathon/commit/cb04df585fa1b6897ca99b0502d51db5ce553076) をベースに、このリポジトリで独立して実行できるよう移植しています。
 
@@ -15,63 +15,55 @@ cp .env.example .env
 npm ci
 docker compose up -d --wait db
 npm run db:migrate
-npm run dev
+cd ai-okan
+npm ci
+DATABASE_URL=postgresql://commitpay:commitpay@localhost:55432/commitpay_agi_lab npm run dev
 ```
 
-[http://localhost:3000](http://localhost:3000) を開いて「はじめる」から進みます。別のアプリが 3000 番を使用中なら `npm run dev -- --port 3001` を指定してください。
+[http://localhost:3000](http://localhost:3000) を開いて「過去のデータを渡す」から進みます。
 
-`.env` の `GOOGLE_API_KEY` を設定すると、AI による目標のヒアリング・条件提案・証拠判定・異議申し立ての再判定が使えます。Vertex AI を使う場合は `USE_VERTEX=1`、`GOOGLE_CLOUD_PROJECT` を設定し、`gcloud auth application-default login` を実行します。キー未設定では画面や一覧は開けますが、AI を使う目標作成フローと判定は完了できません。
+`ai-okan/.env.local` の `GOOGLE_API_KEY` または `GEMINI_API_KEY` を設定するとGeminiを利用します。Vertex AIでは `USE_VERTEX=1` と `GOOGLE_CLOUD_PROJECT` を設定します。AI未設定や呼び出し失敗時は固定応答のデモモードに切り替わります。
 
-Stripe キー未設定では実際の決済をせず、ペナルティを `MOCKED` として記録します。カード登録を試す場合は Stripe のテスト用シークレットキーと公開キーを両方設定してください。ローカルの証跡は `.data/uploads/` に保存します。
+約束、判定ログ、期限切れ時のモック罰金、画面の復元状態はPostgreSQLに保存します。提出した画像・動画そのものは保存せず、重複判定用のハッシュとメタデータを残します。
 
 DB はこのプロジェクト専用の Compose ボリュームを使い、`localhost:55432/commitpay_agi_lab` で接続します。元リポジトリの DB とポート・データを分けています。`db:migrate` と `tick` も `.env` を読み込みます。設定変更後は開発サーバーを再起動してください。
 
-## 画面と機能
+## 画面とAPI
 
 | パス | 内容 |
 |---|---|
-| `/` | スタートページ |
-| `/app` | 目標作成、コミットメント一覧、証跡提出、判定・異議申し立て |
-| `/mypage` | 信頼スコア、支払先の設定、カード登録、決済履歴 |
-| `/debug` | 判定 JSON の確認、ワーカーの手動実行 |
-
-AI が推奨した証跡とは別の種類でも提出できます。判定が不確実な場合は `UNCERTAIN` とし、そのまま猶予期限を迎えた場合は免責します。
-
-### 動画の証跡
-
-動画は撮影・選択したあとプレビューで中身を確認してから提出します。アップロードは Cloud Storage への直接 PUT で、進捗を表示します。1 ファイル 200MB まで、AI が解析するのは先頭 10 分までです（超える場合は提出前に画面へ表示します）。60 秒以下の動画は 2 コマ/秒、それより長い動画は 1 コマ/秒でサンプリングします。
-
-Vertex AI（`USE_VERTEX=1`）では `gs://` の URI をそのまま渡すため、動画本体はアプリを経由しません。`GOOGLE_API_KEY` 方式では Gemini の Files API へアップロードし、解析可能になるまで待ってから判定します。ローカル保存（`STORAGE_DRIVER=local`）でも同じ経路で判定できます。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。
+| `/` | 過去データ、見立て、約束、監視の4ステップ |
+| `/api/okan` | 状態復元、見立て生成、約束・期限切れの記録 |
+| `/api/verify` | 写真・動画のAI判定と判定ログ保存 |
+| `/api/health` | Cloud SQL接続とAIエンジンの稼働確認 |
 
 ## 開発・デモ
 
 ```bash
+cd ai-okan
 npm run typecheck
+npm run lint
+npm test
 npm run build
-npm start                 # http://localhost:8080
-npm run tick             # 締切超過・猶予切れを1回処理
 ```
 
-デモで猶予を短縮するには `.env` の `GRACE_PERIOD_HOURS=0.01`（36秒）を設定します。ローカルでは自動実行のスケジューラーは起動しないので、`npm run tick` または `/debug` のボタンで処理を進めてください。
-
-認証は参照元と同じ固定デモユーザーです。寄付・友人への支払先は希望の記録のみで、第三者への送金は実装していません。
+認証は固定デモユーザーです。期限切れボタンは実課金を行わず、既存バックエンドの `penalty_transactions` に `MOCKED` として記録します。
 
 ## 構成
 
-- Next.js App Router / React / TypeScript
+- Next.js 16 App Router / React / TypeScript
 - PostgreSQL 16
-- Gemini API または Vertex AI
-- ローカルファイル保存 または Cloud Storage
-- Stripe（未設定時はモック）
+- Vertex AI / Gemini API / OpenAI（未設定時はデモ応答）
+- Cloud Run / Cloud SQL
 
-設計の詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、参照元の開発時の分担・API 契約は [docs/HANDOFF.md](docs/HANDOFF.md) を参照してください。
+AIおかん固有の設計とデモ手順は [ai-okan/README.md](ai-okan/README.md) と [ai-okan/DEMO.md](ai-okan/DEMO.md) を参照してください。ルートの旧CommitPay実装はDBスキーマ、マイグレーション、スケジューラーの共有バックエンドとして残しています。
 
 ## CI/CD
 
 [GitHub Actions](https://github.com/okita-noon/hackathon_AI_mokuyoukai_AGI_Lab/actions/workflows/ci-cd.yml) で次を実行します。
 
 - **main 向け PR**: 依存関係のインストール、型検査、PostgreSQL 16 へのスキーマ適用・再適用、`tests/*.test.ts` があればテスト、本番 Docker イメージのビルド。
-- **main への push（PR マージを含む）**: 同じ検証に成功したイメージを Artifact Registry に保存し、本番 DB のスキーマ適用 → Cloud Run の新リビジョン作成 → トラフィック切り替え → HTTP 確認。
+- **main への push（PR マージを含む）**: 同じ検証に成功した `ai-okan/` のイメージを Artifact Registry に保存し、本番 DB のスキーマ適用 → Cloud Run の新リビジョン作成 → `/api/health` でDB接続確認 → トラフィック切り替え。
 - **手動実行**: Actions の `Run workflow` で `main` を選択。ほかのブランチでは検証だけ実行します。
 
 デプロイ先は `ai-lab-okita2026` / `asia-northeast1` / `commitpay-agi-lab`。既存の環境変数・Secret Manager 参照・Cloud SQL 接続・実行サービスアカウントは維持します。リクエストタイムアウトは動画判定に合わせて 300 秒を設定します。イメージはコミット SHA で識別し、Actions の実行サマリーに公開 URL とリビジョンを記録します。

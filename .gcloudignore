@@ -4,6 +4,8 @@
 !.env.example
 node_modules/
 .next/
+**/node_modules/
+**/.next/
 .data/
 *.log
 tsconfig.tsbuildinfo

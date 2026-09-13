@@ -25,11 +25,17 @@ bash infra/migrate-cloud.sh
 # --timeout は動画判定（アップロード確認 → Gemini の前処理 → 解析）に必要な長さ。
 # ほかの環境変数・シークレット・接続設定は既存のまま維持する。
 gcloud run services update "$SERVICE" --region "$REGION" \
-  --image "$IMAGE" --timeout 300 --no-traffic --update-labels "commit-sha=${GITHUB_SHA}"
+  --image "$IMAGE" --timeout 300 --no-traffic --tag candidate --update-labels "commit-sha=${GITHUB_SHA}"
 REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+CANDIDATE_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" \
+  --format='value(status.traffic[?tag=candidate].url)')"
+test -n "$CANDIDATE_URL"
+curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --max-time 30 \
+  "${CANDIDATE_URL}/api/health" >/dev/null
 gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions="${REVISION}=100"
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
-curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --max-time 30 "$URL" >/dev/null
+curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --max-time 30 \
+  "${URL}/api/health" >/dev/null
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   printf 'Deployed `%s` to [%s](%s)\n\nRevision: `%s`\n' "$GITHUB_SHA" "$SERVICE" "$URL" "$REVISION" >> "$GITHUB_STEP_SUMMARY"
 fi
