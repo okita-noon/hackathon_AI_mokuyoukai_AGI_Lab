@@ -174,7 +174,9 @@ h3 { font-size: 17px; margin: 0 0 6px; }
   color: var(--muted); font-size: 10px; font-weight: 600;
 }
 .tabbar a[data-active="true"] { color: var(--accent); }
-.tabbar-icon { font-size: 19px; line-height: 1; }
+.tabbar-icon { width: 20px; height: 20px; line-height: 1; }
+.tabbar-icon svg { display: block; width: 100%; height: 100%; fill: currentColor; }
+.tabbar a:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 8px; }
 
 /* ---- 画面ヘッダ ---- */
 .screen-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; min-height: 32px; }
