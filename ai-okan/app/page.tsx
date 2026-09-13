@@ -17,51 +17,66 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="space-y-12">
-      <section className="space-y-7">
-        <div className="flex items-center gap-4">
-          <OkanFace size={88} />
-          <p className="rounded-2xl rounded-bl-md border-2 border-line-strong bg-bg px-5 py-3 text-lg font-bold">
+    <div className="space-y-10">
+      {/* 読ませるのではなく、顔と一言で伝える */}
+      <section className="relative overflow-hidden rounded-3xl border-2 border-line bg-bg-soft px-6 pb-12 pt-32 text-center sm:px-10 sm:pb-16 sm:pt-36">
+        <Noren />
+
+        <div className="relative mx-auto flex max-w-xl flex-col items-center gap-6">
+          <OkanFace size={152} />
+
+          <p className="relative rounded-3xl rounded-tl-lg border-2 border-line-strong bg-bg px-6 py-5 text-xl font-bold leading-snug text-balance sm:px-7 sm:text-3xl">
             あんた、また来たんか。
+            <br />
+            まあ座り。
           </p>
-        </div>
-        <h1 className="text-4xl font-bold leading-[1.25] sm:text-5xl">
-          自分以上に
-          <br />
-          自分を知っているAIが、
-          <br />
-          <span className="text-accent">逃がしてくれない。</span>
-        </h1>
-        <p className="max-w-2xl text-lg text-muted">
-          目標が続かないのは、意志が弱いからではありません。
-          <span className="font-bold text-fg">誰も見ていないから</span>です。
-          過去のデータをすべて読み込んだAIおかんが約束を結び、証拠を出すまで許しません。
-        </p>
-        <div className="flex flex-wrap items-center gap-4">
+
+          <h1 className="text-2xl font-bold leading-snug text-balance sm:text-4xl">
+            あんたの目標、
+            <br className="sm:hidden" />
+            <span className="text-accent">おかんが見たるわ。</span>
+          </h1>
+
           <Button onClick={() => router.push("/ingest")}>おかんに自分を知ってもらう</Button>
           <EngineBadge engine={engine} />
         </div>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="border-l-8 border-accent pl-4 text-xl font-bold">やることは4つだけ</h2>
-        <ol className="grid gap-4 sm:grid-cols-4">
-          {[
-            { n: 1, t: "自分を知ってもらう", d: "Gmail・X・LINEの履歴をおかんに見せます" },
-            { n: 2, t: "見立てを受ける", d: "AIが挫折のパターンを具体的に指摘します" },
-            { n: 3, t: "約束を結ぶ", d: "期限・証拠・罰金を自分で決めて自分を縛ります" },
-            { n: 4, t: "監視される", d: "提出した写真・動画をAIが判定します" },
-          ].map((c) => (
-            <li key={c.n} className="rounded-xl border border-line bg-bg p-5">
-              <span className="grid size-8 place-items-center rounded-full bg-accent font-bold text-white">
-                {c.n}
+      {/* 手順は読ませない。単語と番号だけ置く */}
+      <ol className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+        {["知ってもらう", "見立て", "約束", "監視"].map((t, i) => (
+          <li key={t} className="flex items-center gap-2 sm:gap-3">
+            <span className="flex items-center gap-2 rounded-full border border-line bg-bg px-4 py-2">
+              <span className="grid size-6 place-items-center rounded-full bg-accent text-xs font-bold text-white">
+                {i + 1}
               </span>
-              <p className="mt-3 font-bold">{c.t}</p>
-              <p className="mt-1 text-sm text-muted">{c.d}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
+              <span className="font-bold">{t}</span>
+            </span>
+            {i < 3 && <span className="text-line-strong">→</span>}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** 入口ののれん。読ませる文字ではなく、店先に入る感覚を出すための飾り */
+function Noren() {
+  const panels = ["", "お", "か", "ん", ""];
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-0" aria-hidden>
+      {/* のれんを吊る竿 */}
+      <div className="h-2 w-full bg-line-strong" />
+      <div className="flex h-20 w-full gap-[3px] sm:h-24">
+        {panels.map((ch, i) => (
+          <div
+            key={i}
+            className="grid flex-1 place-items-center rounded-b-lg bg-accent pb-2 text-3xl font-bold text-white sm:text-4xl"
+          >
+            {ch}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
