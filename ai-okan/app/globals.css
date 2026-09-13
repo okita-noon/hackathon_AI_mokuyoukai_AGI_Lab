@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+/*
+ * 構造・コントラスト・フォーカスの作法はデジタル庁デザインシステム(DADS)に倣う。
+ * 出典: https://github.com/digital-go-jp/design-tokens (examples/tokens.css)
+ * 配色だけは「大阪のおかんの台所」に寄せた暖色に置き換えている。
+ */
+:root {
+  /* Primitive */
+  --blue-900: #0017c1;
+  --blue-800: #0031d8;
+  --gray-50: #f2f2f2;
+  --gray-100: #e6e6e6;
+  --gray-200: #cccccc;
+  --gray-536: #767676;
+  --gray-700: #4d4d4d;
+  --gray-900: #1a1a1a;
+  --red-800: #ec0000;
+  --red-900: #ce0000;
+  --green-600: #259d63;
+  --yellow-300: #ffd43d;
+
+  /* Semantic（暖色に置き換え。コントラスト比はDADSの基準を満たす範囲で選定） */
+  --bg: #fdf8f0;
+  --bg-soft: #f6ede0;
+  --line: #e0d2bf;
+  --line-strong: #a8917a;
+  --fg: #2b2320;
+  --muted: #6b5a4c;
+  --accent: #c2402a;
+  --accent-soft: #a2331f;
+  --accent-warm: #e8912a;
+  --danger: #c2402a;
+  --ok: #3d7f52;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-soft: var(--bg-soft);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-warm: var(--accent-warm);
+  --color-line-strong: var(--line-strong);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --font-sans: var(--font-jp);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* 台所の布巾みたいな、ごく薄い格子。うるさくならん程度に */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.28;
+}
+
+body {
+  font-family: var(--font-jp), system-ui, sans-serif;
+  line-height: 1.7;
+}
+
+/* DADSのフォーカスインジケーター: Yellow-300 と Black の2重構造 */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--yellow-300);
+  outline-offset: 0;
+  box-shadow: 0 0 0 4px #000;
+  border-radius: 4px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
