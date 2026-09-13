@@ -62,7 +62,7 @@ jobs:
         run: cd ai-okan && npx playwright install --with-deps chromium
       - name: Verify real browser journeys against production image
         run: |
-          docker run -d --name ai-okan-e2e --network host -e PORT=3107 -e DATABASE_URL -e USE_VERTEX=0 commitpay:ci
+          docker run -d --name ai-okan-e2e --network host -e HOSTNAME=0.0.0.0 -e PORT=3107 -e DATABASE_URL -e USE_VERTEX=0 commitpay:ci
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://localhost:3107/api/health; then break; fi
             sleep 2
