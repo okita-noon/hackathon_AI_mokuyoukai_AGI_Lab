@@ -41,12 +41,30 @@ OPENAI_API_KEY=...    # gpt-4o-mini
 
 | パス | 役割 |
 |---|---|
-| `app/page.tsx` | 4ステップの状態遷移 |
+| `app/page.tsx` | トップ |
+| `app/ingest/` | 過去データの投入 |
+| `app/dossier/` | おかんの見立て |
+| `app/promise/` | 約束 |
+| `app/watch/` | 監視・判定・罰金 |
+| `components/Shell.tsx` | 全ページ共通の枠。ステップ表示はURLから決まる |
+| `lib/store.ts` | 画面をまたぐ状態（localStorage） |
 | `app/api/okan/` | 人物プロファイル生成・約束への返答・説教 |
 | `app/api/verify/` | 提出された写真・動画がエビデンスとして妥当かの判定 |
 | `lib/llm.ts` | Gemini / OpenAI / デモモードの吸収層 |
 | `data/past-self.json` | 過去2年分のサンプル履歴 36件 |
 | `docs/superpowers/specs/` | 設計書 |
+
+## 画面遷移
+
+| URL | 画面 | 入るための条件 |
+|---|---|---|
+| `/` | トップ | なし |
+| `/ingest` | 過去を渡す | なし |
+| `/dossier` | 見立て | 見立てが生成済み。無ければ `/ingest` へ戻す |
+| `/promise` | 約束 | 見立てが生成済み。無ければ `/ingest` へ戻す |
+| `/watch` | 監視 | 約束が成立済み。無ければ `/promise`（または `/ingest`）へ戻す |
+
+ブラウザの戻る・進むで行き来でき、途中のURLを直接開いても条件を満たさなければ手前の画面に送り返す。
 
 状態は localStorage のみ。DB・認証・サーバー側の永続化は持たない。
 
