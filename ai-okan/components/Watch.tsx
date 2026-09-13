@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import type { Promise as Contract, Verdict, Engine } from "@/lib/types";
 import { Button, EngineBadge, Heading, OkanBubble } from "./ui";
+import { PenaltyCheckout } from "./PenaltyCheckout";
 
 type Props = {
   contract: Contract;
@@ -16,7 +17,7 @@ const FRAME_COUNT = 3;
 export function Watch({ contract, onReset }: Props) {
   const [preview, setPreview] = useState<{ url: string; isVideo: boolean } | null>(null);
   const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string }) | null>(null);
-  const [scold, setScold] = useState<{ okan: string; engine: Engine } | null>(null);
+  const [scold, setScold] = useState<{ okan: string; engine: Engine; payment?: "stripe_checkout" | "mock" } | null>(null);
   const [busy, setBusy] = useState<"judge" | "scold" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -84,6 +85,9 @@ export function Watch({ contract, onReset }: Props) {
         <div className="mx-auto max-w-2xl text-left">
           <OkanBubble text={scold.okan} tone="angry" />
         </div>
+        {scold.payment === "stripe_checkout" && contract.id && (
+          <PenaltyCheckout commitmentId={contract.id} amount={contract.penalty} />
+        )}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <EngineBadge engine={scold.engine} />
         </div>

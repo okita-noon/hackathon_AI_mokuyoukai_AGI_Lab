@@ -47,6 +47,24 @@ Cloud Run では `USE_VERTEX=1`、`GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATIO
 
 画面右上のバッジに、**実AIで生成したのか固定応答なのか**が常に表示される。
 
+## 罰金の支払い（Stripe Checkout）
+
+`.env.local` に Stripe のテスト用シークレットキーを置くと、「期限切れにする」のあとに罰金の支払い欄（支払い画面を開くボタンと QR コード）が出る。
+
+```bash
+STRIPE_SECRET_KEY=sk_test_...
+# 任意。決済後の戻り先。未設定ならリクエストの Host から組み立てる
+APP_BASE_URL=https://example.run.app
+```
+
+- 支払い画面は Stripe がホストする Checkout。テストモードではカード番号 `4242 4242 4242 4242`（有効期限は未来の日付、CVC は任意）で払え、実際には請求されない
+- テストキー（`sk_test_`）のときは「テストカードで支払う（デモ用）」ボタンも出る。押すとサーバー側で Stripe のテスト用決済手段 `pm_card_visa` を使って決済するので、カード番号を入力せずに決済完了まで見せられる（本番キーでは動かない）
+- PC で投影しながらスマホで QR を読んで払うと、PC 側も数秒以内に「支払いを確認しました」に切り替わる（Webhook なしで、画面から Stripe に状態を問い合わせている）
+- ローカル起動中にスマホで払うと、決済後の戻り先（`localhost`）はスマホから開けない。支払い自体は PC 側の画面で確認できる
+- キー未設定なら従来どおり罰金は `MOCKED` として記録するだけ
+
+Cloud Run では `STRIPE_SECRET_KEY` を Secret Manager 経由で渡す（ルートの `infra/deploy.sh` を `STRIPE_SECRET_KEY` 付きで実行すると登録される）。
+
 ## 構成
 
 | パス | 役割 |
@@ -54,6 +72,8 @@ Cloud Run では `USE_VERTEX=1`、`GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATIO
 | `app/page.tsx` | 4ステップの状態遷移 |
 | `app/api/okan/` | 人物プロファイル生成・約束への返答・説教 |
 | `app/api/verify/` | 提出された写真・動画がエビデンスとして妥当かの判定 |
+| `app/api/penalty/checkout/` | 罰金の支払い画面（Stripe Checkout）の発行と支払い状況の確認 |
+| `app/penalty/paid/` | 決済後の戻り先。支払いを確定させる |
 | `lib/llm.ts` | Vertex AI / Gemini / OpenAI / デモモードの吸収層 |
 | `lib/backend/` | Cloud SQL 接続、約束の検証・期限変換 |
 | `data/past-self.json` | 過去2年分のサンプル履歴 36件 |
