@@ -24,7 +24,7 @@ export function Ingest({
       ...pastSelf.sources.map((s) => `${s.label} を読み込み中… ${s.items.length}件`),
       "時系列を突き合わせ中…",
       "宣言と実績の差分を計算中…",
-      "おかんが目を通してる…",
+      "AIおかんが目を通しています…",
     ];
     setLog([]);
     let i = 0;
@@ -36,10 +36,10 @@ export function Ingest({
 
   return (
     <div className="space-y-8">
-      <Heading>あんたのこと、教えて</Heading>
+      <Heading>過去のデータを渡す</Heading>
       <p className="text-muted">
-        過去{total}件の履歴をおかんに渡します。Gmailのエクスポート、Xのアーカイブ、LINEのトーク履歴——
-        <span className="font-bold text-fg">どれも今日エクスポートできる、実在する形式</span>です。
+        過去{total}件の履歴をAIおかんに渡します。Gmailのエクスポート、Xのアーカイブ、LINEのトーク履歴——
+        <span className="font-bold text-fg">いずれも実際にエクスポートできる形式</span>です。
       </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -67,14 +67,14 @@ export function Ingest({
 
       <div className="space-y-2">
         <label htmlFor="extra" className="block text-sm font-bold">
-          言うとくことある？<span className="ml-2 bg-bg-soft px-2 py-0.5 text-xs font-normal text-muted">任意</span>
+          補足があれば<span className="ml-2 bg-bg-soft px-2 py-0.5 text-xs font-normal text-muted">任意</span>
         </label>
         <textarea
           id="extra"
           value={extra}
           onChange={(e) => setExtra(e.target.value)}
           rows={2}
-          placeholder="例：最近ほんまに時間がない"
+          placeholder="例：最近まとまった時間が取れない"
           className="w-full rounded-xl border-2 border-line-strong bg-white px-4 py-3 text-fg placeholder:text-muted/60"
         />
       </div>
@@ -89,7 +89,7 @@ export function Ingest({
           <p className="text-accent">…</p>
         </div>
       ) : (
-        <Button onClick={() => onDone(extra)}>おかんに全部渡す</Button>
+        <Button onClick={() => onDone(extra)}>AIおかんに渡す</Button>
       )}
     </div>
   );

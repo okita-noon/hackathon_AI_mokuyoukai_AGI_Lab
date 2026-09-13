@@ -9,27 +9,38 @@ type Props = {
   onReset: () => void;
 };
 
+/** Geminiにインラインで渡せる現実的な上限。これを超えたらフレームだけ送る */
+const MAX_INLINE_VIDEO_BYTES = 8 * 1024 * 1024;
+const FRAME_COUNT = 3;
+
 export function Watch({ contract, onReset }: Props) {
-  const [preview, setPreview] = useState<string | null>(null);
-  const [verdict, setVerdict] = useState<(Verdict & { engine: Engine }) | null>(null);
+  const [preview, setPreview] = useState<{ url: string; isVideo: boolean } | null>(null);
+  const [verdict, setVerdict] = useState<(Verdict & { engine: Engine; analyzed?: string }) | null>(null);
   const [scold, setScold] = useState<{ okan: string; engine: Engine } | null>(null);
   const [busy, setBusy] = useState<"judge" | "scold" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function judge(file: File) {
+    const isVideo = file.type.startsWith("video/");
     const dataUrl = await toDataUrl(file);
-    setPreview(dataUrl);
+    setPreview({ url: dataUrl, isVideo });
     setVerdict(null);
     setBusy("judge");
     try {
+      // 動画はブラウザ側でコマを抜き出しておく。動画を扱えないモデルでも判定できるようにするため
+      const frames = isVideo
+        ? await extractFrames(file, FRAME_COUNT)
+        : [{ mimeType: file.type || "image/jpeg", base64: dataUrl.split(",")[1] }];
+
+      const video =
+        isVideo && file.size <= MAX_INLINE_VIDEO_BYTES
+          ? { mimeType: file.type, base64: dataUrl.split(",")[1] }
+          : undefined;
+
       const res = await fetch("/api/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mimeType: file.type || "image/jpeg",
-          base64: dataUrl.split(",")[1],
-          promise: contract,
-        }),
+        body: JSON.stringify({ video, frames, promise: contract }),
       });
       setVerdict(await res.json());
     } finally {
@@ -66,7 +77,7 @@ export function Watch({ contract, onReset }: Props) {
           <EngineBadge engine={scold.engine} />
         </div>
         <Button variant="secondary" onClick={onReset}>
-          もう一回、約束しなおす
+          もう一度、約束をやり直す
         </Button>
       </div>
     );
@@ -74,7 +85,7 @@ export function Watch({ contract, onReset }: Props) {
 
   return (
     <div className="space-y-8">
-      <Heading lead="証拠を出すまで、おかんは信じひん。">監視</Heading>
+      <Heading lead="証拠を提出するまで、AIおかんは認めません。">監視</Heading>
 
       <dl className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         {[
@@ -98,10 +109,14 @@ export function Watch({ contract, onReset }: Props) {
           >
             {preview ? (
               // 提出された証拠のプレビュー
-              <img src={preview} alt="提出した証拠" className="size-full object-cover" />
+              preview.isVideo ? (
+                <video src={preview.url} controls playsInline className="size-full object-cover" />
+              ) : (
+                <img src={preview.url} alt="提出した証拠" className="size-full object-cover" />
+              )
             ) : (
               <div className="space-y-2 px-6">
-                <p className="font-bold">証拠の写真を出す</p>
+                <p className="font-bold">証拠の写真・動画を出す</p>
                 <p className="text-xs text-muted">タップして撮影／ファイルを選ぶ</p>
               </div>
             )}
@@ -109,7 +124,7 @@ export function Watch({ contract, onReset }: Props) {
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             capture="environment"
             className="hidden"
             onChange={(e) => {
@@ -119,17 +134,17 @@ export function Watch({ contract, onReset }: Props) {
           />
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => fileRef.current?.click()} disabled={busy !== null}>
-              {busy === "judge" ? "おかんが見とる…" : "証拠を提出する"}
+              {busy === "judge" ? "判定しています…" : "証拠を提出する"}
             </Button>
             <Button variant="secondary" onClick={timeUp} disabled={busy !== null}>
-              {busy === "scold" ? "…" : "期限が来てもうた"}
+              {busy === "scold" ? "…" : "期限切れにする（デモ用）"}
             </Button>
           </div>
         </div>
 
         <div className="min-h-56">
           {busy === "judge" && (
-            <p aria-live="polite" className="text-muted">おかんが写真を確認しとる…</p>
+            <p aria-live="polite" className="text-muted">AIおかんが写真を確認しています…</p>
           )}
           {verdict && (
             <div className="rise space-y-4">
@@ -137,8 +152,11 @@ export function Watch({ contract, onReset }: Props) {
                 <VerdictChip verdict={verdict.verdict} />
                 <EngineBadge engine={verdict.engine} />
               </div>
+              {verdict.analyzed && (
+                <p className="text-xs text-muted">解析対象：{verdict.analyzed}</p>
+              )}
               <p className="text-sm text-muted">
-                おかんが見たもの：{verdict.whatISee}
+                AIおかんが見たもの：{verdict.whatISee}
               </p>
               <OkanBubble text={verdict.okan} tone={verdict.verdict === "ok" ? "normal" : "angry"} />
               <div className="space-y-1">
@@ -169,6 +187,58 @@ function VerdictChip({ verdict }: { verdict: Verdict["verdict"] }) {
       {map.label}
     </span>
   );
+}
+
+/** 動画から等間隔でコマを抜き出し、JPEGのbase64にして返す */
+async function extractFrames(file: File, count: number): Promise<{ mimeType: string; base64: string }[]> {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.muted = true;
+  video.playsInline = true;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("動画を読み込めませんでした"));
+    });
+
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+    const scale = Math.min(1, 640 / (video.videoWidth || 640));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round((video.videoWidth || 640) * scale);
+    canvas.height = Math.round((video.videoHeight || 360) * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return [];
+
+    const frames: { mimeType: string; base64: string }[] = [];
+    for (let i = 0; i < count; i++) {
+      // 端は真っ暗なことがあるので、両端を少し内側に寄せる
+      const t = duration * ((i + 0.5) / count);
+      await seek(video, Math.min(t, Math.max(0, duration - 0.05)));
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frames.push({
+        mimeType: "image/jpeg",
+        base64: canvas.toDataURL("image/jpeg", 0.7).split(",")[1],
+      });
+    }
+    return frames;
+  } catch {
+    return [];
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function seek(video: HTMLVideoElement, time: number): Promise<void> {
+  return new window.Promise((resolve) => {
+    const done = () => {
+      video.removeEventListener("seeked", done);
+      resolve();
+    };
+    video.addEventListener("seeked", done);
+    video.currentTime = time;
+  });
 }
 
 function toDataUrl(file: File): Promise<string> {

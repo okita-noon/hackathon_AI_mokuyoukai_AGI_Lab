@@ -8,12 +8,12 @@ export function detectEngine(): Engine {
   return "demo";
 }
 
-export type ImageInput = { mimeType: string; base64: string };
+export type MediaInput = { mimeType: string; base64: string };
 
 type Args = {
   system: string;
   user: string;
-  image?: ImageInput;
+  media?: MediaInput[];
 };
 
 /**
@@ -42,10 +42,13 @@ export async function generateJSON<T>(args: Args): Promise<{ data: T; engine: En
   }
 }
 
-async function callGemini({ system, user, image }: Args, signal: AbortSignal): Promise<string> {
+async function callGemini({ system, user, media }: Args, signal: AbortSignal): Promise<string> {
   const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
   const parts: Record<string, unknown>[] = [{ text: user }];
-  if (image) parts.push({ inlineData: { mimeType: image.mimeType, data: image.base64 } });
+  // Geminiは画像も動画も inlineData で同じように受け取れる
+  for (const m of media ?? []) {
+    parts.push({ inlineData: { mimeType: m.mimeType, data: m.base64 } });
+  }
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -68,13 +71,15 @@ async function callGemini({ system, user, image }: Args, signal: AbortSignal): P
   return json?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
 }
 
-async function callOpenAI({ system, user, image }: Args, signal: AbortSignal): Promise<string> {
+async function callOpenAI({ system, user, media }: Args, signal: AbortSignal): Promise<string> {
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
   const content: Record<string, unknown>[] = [{ type: "text", text: user }];
-  if (image) {
+  // OpenAIのChat Completionsは動画を受け取れないため、画像だけを渡す
+  for (const m of media ?? []) {
+    if (!m.mimeType.startsWith("image/")) continue;
     content.push({
       type: "image_url",
-      image_url: { url: `data:${image.mimeType};base64,${image.base64}` },
+      image_url: { url: `data:${m.mimeType};base64,${m.base64}` },
     });
   }
 

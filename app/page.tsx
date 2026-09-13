@@ -94,7 +94,7 @@ export default function Page() {
       <div className="mb-10 flex flex-wrap items-center justify-between gap-4 border-b-4 border-accent pb-4">
         <button onClick={reset} className="text-left">
           <p className="text-xl font-bold">AIおかん</p>
-          <p className="text-xs text-muted">あんたのこと、ぜんぶ知っとるで</p>
+          <p className="text-xs text-muted">自分以上に自分を知っているAI</p>
         </button>
         {s.step > 0 && <StepDots step={s.step} />}
       </div>
@@ -151,19 +151,17 @@ function Intro({ onStart }: { onStart: () => void }) {
         <h1 className="text-4xl font-bold leading-[1.25] sm:text-5xl">
           自分以上に
           <br />
-          自分を知っとるAIが、
+          自分を知っているAIが、
           <br />
-          <span className="text-accent">逃がしてくれへん。</span>
+          <span className="text-accent">逃がしてくれない。</span>
         </h1>
         <p className="max-w-2xl text-lg text-muted">
-          目標が続かへんのは、意志が弱いからやない。
-          <span className="font-bold text-fg">誰も見てへんから</span>や。
-          あんたの過去をぜんぶ読んだおかんが約束を結んで、証拠を出すまで許さん。
-          <br />
-          口はキツいけど、見放さへんで。
+          目標が続かないのは、意志が弱いからではありません。
+          <span className="font-bold text-fg">誰も見ていないから</span>です。
+          過去のデータをすべて読み込んだAIおかんが約束を結び、証拠を出すまで許しません。
         </p>
         <div className="flex flex-wrap items-center gap-4">
-          <Button onClick={onStart}>あんたのこと、教えて</Button>
+          <Button onClick={onStart}>過去のデータを渡す</Button>
           <EngineBadge engine={engine} />
         </div>
       </section>
@@ -172,10 +170,10 @@ function Intro({ onStart }: { onStart: () => void }) {
         <h2 className="border-l-8 border-accent pl-4 text-xl font-bold">やることは4つだけ</h2>
         <ol className="grid gap-4 sm:grid-cols-4">
           {[
-            { n: 1, t: "過去を渡す", d: "Gmail・X・LINEの履歴をそのまま投入する" },
-            { n: 2, t: "見立てを食らう", d: "AIが挫折パターンを名指しで言い当てる" },
-            { n: 3, t: "約束を結ぶ", d: "期限・証拠・罰金を自分で決めて自分を縛る" },
-            { n: 4, t: "監視される", d: "写真をAIが判定。ごまかしは通らん" },
+            { n: 1, t: "過去を渡す", d: "Gmail・X・LINEの履歴をそのまま投入します" },
+            { n: 2, t: "見立てを受ける", d: "AIが挫折のパターンを具体的に指摘します" },
+            { n: 3, t: "約束を結ぶ", d: "期限・証拠・罰金を自分で決めて自分を縛ります" },
+            { n: 4, t: "監視される", d: "提出した写真をAIが判定します" },
           ].map((c) => (
             <li key={c.n} className="rounded-xl border border-line bg-bg p-5">
               <span className="grid size-8 place-items-center rounded-full bg-accent font-bold text-white">

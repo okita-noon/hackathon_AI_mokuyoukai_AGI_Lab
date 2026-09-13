@@ -44,9 +44,9 @@ export function Dossier({
 
       <dl className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3">
         {[
-          { k: "繰り返しとるパターン", v: profile.pattern },
+          { k: "繰り返しているパターン", v: profile.pattern },
           { k: "どこで折れるか", v: profile.weakness },
-          { k: "このままやと", v: profile.prediction },
+          { k: "このままだと", v: profile.prediction },
         ].map((row) => (
           <div key={row.k} className="bg-white p-5">
             <dt className="bg-bg-soft px-2 py-1 text-xs font-bold text-muted">{row.k}</dt>
@@ -60,8 +60,8 @@ export function Dossier({
       </p>
 
       <div className="flex flex-wrap items-center gap-4">
-        <Button onClick={onNext}>ほな、約束する</Button>
-        <span className="text-sm text-muted">言い当てられたうちに次いこか。</span>
+        <Button onClick={onNext}>約束に進む</Button>
+        <span className="text-sm text-muted">続けて目標を設定します。</span>
       </div>
     </div>
   );

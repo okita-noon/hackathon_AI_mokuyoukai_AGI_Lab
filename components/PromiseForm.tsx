@@ -31,8 +31,8 @@ export function PromiseForm({
     <div className="space-y-8">
       <Heading>約束</Heading>
       <p className="text-muted">
-        叱られるんやない。<span className="font-bold text-fg">自分で決めて、自分で縛る。</span>
-        罰金の額を決めるのはあんたです。
+        叱られるのではありません。<span className="font-bold text-fg">自分で決めて、自分で縛ります。</span>
+        罰金の額を決めるのはあなたです。
       </p>
 
       <div className="space-y-8 rounded-xl border border-line bg-white p-6 sm:p-8">
@@ -71,7 +71,7 @@ export function PromiseForm({
               ))}
             </select>
           </Field>
-          <Field label="何を証拠に出す" hint="おかんがこの条件で写真を判定します。">
+          <Field label="何を証拠に出す" hint="AIおかんはこの条件で写真を判定します。">
             <input
               value={evidence}
               disabled={locked}
@@ -81,7 +81,7 @@ export function PromiseForm({
           </Field>
         </div>
 
-        <Field label="守れへんかったら払う金額" hint="高いほど効きます。安すぎるとおかんに笑われます。">
+        <Field label="守れへんかったら払う金額" hint="金額が高いほど効果があります。">
           <div className="flex items-center gap-5">
             <input
               type="range"
@@ -105,7 +105,7 @@ export function PromiseForm({
           disabled={busy || !goal.trim()}
           onClick={() => onSubmit({ goal, deadline, evidence, penalty })}
         >
-          {busy ? "おかんが考えとる…" : "この条件で約束する"}
+          {busy ? "AIおかんが確認しています…" : "この条件で約束する"}
         </Button>
       )}
 
