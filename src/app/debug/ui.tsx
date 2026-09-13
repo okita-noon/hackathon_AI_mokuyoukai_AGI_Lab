@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import VoiceInput from "@/components/VoiceInput";
+import { readMediaMeta, uploadWithProgress } from "@/lib/browser-media";
 
 type Judgement = {
   status: string;
@@ -147,18 +148,20 @@ function Row({ c, onDone }: { c: Commitment; onDone: () => void }) {
   const submitProof = async (file: File) => {
     setBusy("証拠をアップロード中...");
     try {
+      // 0. 動画・音声は尺と解像度を測ってから送る（解析範囲の決定に使う）
+      const mediaMeta = await readMediaMeta(file);
       // 1. 署名付きURLを払い出し
       const t = await api(`/api/commitments/${c.id}/proof/upload-url`, {
         method: "POST",
         body: JSON.stringify({ mimeType: file.type }),
       });
       // 2. 本体を直接PUT（GCS or ローカル）
-      await fetch(t.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+      await uploadWithProgress(t.uploadUrl, file, (percent) => setBusy(`証拠をアップロード中... ${percent}%`));
       // 3. 判定
       setBusy("Geminiが判定中...");
       const d = await api(`/api/commitments/${c.id}/proof`, {
         method: "POST",
-        body: JSON.stringify({ storage_uri: t.storageUri, mime_type: file.type, note }),
+        body: JSON.stringify({ storage_uri: t.storageUri, mime_type: file.type, note, media_meta: mediaMeta }),
       });
       setResult(d.judgement);
       onDone();
@@ -203,7 +206,7 @@ function Row({ c, onDone }: { c: Commitment; onDone: () => void }) {
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*,audio/*"
             style={{ display: "none" }}
             onChange={(e) => e.target.files?.[0] && submitProof(e.target.files[0])}
           />

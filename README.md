@@ -2,7 +2,7 @@
 
 **公開環境**: [CommitPay](https://commitpay-agi-lab-921302036612.asia-northeast1.run.app)（Cloud Run / asia-northeast1）
 
-目標を宣言し、写真・動画・音声・位置情報の証跡を提出すると、Gemini が達成状況を判定するハッカソン向けアプリです。未達時は猶予期間と異議申し立てを経て、Stripe のペナルティ処理を行います。
+目標を宣言し、写真・動画・音声・位置情報の証跡を提出すると、Gemini が達成状況を判定するハッカソン向けアプリです。動画は尺と解析範囲を明示したうえでフレーム単位で確認します。未達時は猶予期間と異議申し立てを経て、Stripe のペナルティ処理を行います。
 
 [google-mini-hackathon](https://github.com/okita-noon/google-mini-hackathon) のコミット [`cb04df5`](https://github.com/okita-noon/google-mini-hackathon/commit/cb04df585fa1b6897ca99b0502d51db5ce553076) をベースに、このリポジトリで独立して実行できるよう移植しています。
 
@@ -37,6 +37,12 @@ DB はこのプロジェクト専用の Compose ボリュームを使い、`loca
 
 AI が推奨した証跡とは別の種類でも提出できます。判定が不確実な場合は `UNCERTAIN` とし、そのまま猶予期限を迎えた場合は免責します。
 
+### 動画の証跡
+
+動画は撮影・選択したあとプレビューで中身を確認してから提出します。アップロードは Cloud Storage への直接 PUT で、進捗を表示します。1 ファイル 200MB まで、AI が解析するのは先頭 10 分までです（超える場合は提出前に画面へ表示します）。60 秒以下の動画は 2 コマ/秒、それより長い動画は 1 コマ/秒でサンプリングします。
+
+Vertex AI（`USE_VERTEX=1`）では `gs://` の URI をそのまま渡すため、動画本体はアプリを経由しません。`GOOGLE_API_KEY` 方式では Gemini の Files API へアップロードし、解析可能になるまで待ってから判定します。ローカル保存（`STORAGE_DRIVER=local`）でも同じ経路で判定できます。詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。
+
 ## 開発・デモ
 
 ```bash
@@ -68,7 +74,7 @@ npm run tick             # 締切超過・猶予切れを1回処理
 - **main への push（PR マージを含む）**: 同じ検証に成功したイメージを Artifact Registry に保存し、本番 DB のスキーマ適用 → Cloud Run の新リビジョン作成 → トラフィック切り替え → HTTP 確認。
 - **手動実行**: Actions の `Run workflow` で `main` を選択。ほかのブランチでは検証だけ実行します。
 
-デプロイ先は `ai-lab-okita2026` / `asia-northeast1` / `commitpay-agi-lab`。既存の環境変数・Secret Manager 参照・Cloud SQL 接続・実行サービスアカウントは維持します。イメージはコミット SHA で識別し、Actions の実行サマリーに公開 URL とリビジョンを記録します。
+デプロイ先は `ai-lab-okita2026` / `asia-northeast1` / `commitpay-agi-lab`。既存の環境変数・Secret Manager 参照・Cloud SQL 接続・実行サービスアカウントは維持します。リクエストタイムアウトは動画判定に合わせて 300 秒を設定します。イメージはコミット SHA で識別し、Actions の実行サマリーに公開 URL とリビジョンを記録します。
 
 main のパイプラインを直列化し、実行中のデプロイは新しい push で中断しません。GitHub Actions は待機中の実行を最新の実行に置き換えるため、連続 push は最新の main に集約される場合があります。古いコミットの再実行もデプロイ直前に除外します。
 

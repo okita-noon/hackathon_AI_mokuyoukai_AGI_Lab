@@ -209,3 +209,12 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 写真や動画に位置情報を添えて出せるようにするため、target_geo は種類に依存しない
+
+-- ============================================================
+-- 2026-09-13: 動画証跡の判定
+--   ブラウザが計測した尺・解像度・サイズ。判定AIに「どこまでを何コマで解析したか」を
+--   伝えるために使う（サーバー側で動画をデコードしないで済ませるため）。
+--   {"duration_sec":42,"width":1920,"height":1080,"size_bytes":31457280}
+-- ============================================================
+ALTER TABLE proof_submissions
+  ADD COLUMN IF NOT EXISTS media_meta JSONB;

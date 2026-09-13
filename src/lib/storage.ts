@@ -8,7 +8,11 @@ const LOCAL_ROOT = path.join(process.cwd(), ".data", "uploads");
 /** 拡張子は Vertex AI 側の判定に影響しないが、GCS 上で人が見て分かるようにしておく */
 const EXT: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic",
-  "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+  // 動画は端末によって出てくる MIME がばらつく（iPhone=quicktime, Android=mp4/webm,
+  // PCからの選択で mpeg/avi/wmv/flv/mkv）。Gemini が解釈できるものは全部受ける。
+  "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "video/mpeg": "mpeg",
+  "video/x-matroska": "mkv", "video/3gpp": "3gp", "video/x-msvideo": "avi",
+  "video/x-ms-wmv": "wmv", "video/x-flv": "flv",
   "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/webm": "webm", "audio/wav": "wav",
 };
 
@@ -82,17 +86,29 @@ export function sha256(buf: Buffer): string {
 }
 
 /**
- * ファイル本体をダウンロードせずに重複検知用のハッシュを得る。
- * 動画のように数十MBあるものを Cloud Run のメモリに載せたくないため、
- * GCS が計算済みの md5 をそのまま使う。
+ * ファイル本体をダウンロードせずにオブジェクトの状態を確かめる。
+ * 動画のように数百MBあるものを Cloud Run のメモリに載せたくないため、
+ * サイズ確認と重複検知（GCSが計算済みの md5）をメタデータだけで済ませる。
+ * オブジェクトが存在しない（アップロードが完了していない）場合は null を返す。
  */
-export async function getRemoteHash(storageUri: string): Promise<{ hash: string; source: string } | null> {
+export async function statObject(
+  storageUri: string,
+): Promise<{ hash: string | null; hashSource: string; sizeBytes: number } | null> {
   if (!storageUri.startsWith("gs://")) return null;
   const { Storage } = await import("@google-cloud/storage");
   const bucket = storageUri.slice(5).split("/")[0];
   const objectPath = storageUri.slice(5 + bucket.length + 1);
-  const [meta] = await new Storage().bucket(bucket).file(objectPath).getMetadata();
-  return meta.md5Hash ? { hash: String(meta.md5Hash), source: "gcs-md5" } : null;
+  try {
+    const [meta] = await new Storage().bucket(bucket).file(objectPath).getMetadata();
+    return {
+      hash: meta.md5Hash ? String(meta.md5Hash) : null,
+      hashSource: meta.md5Hash ? "gcs-md5" : "none",
+      sizeBytes: Number(meta.size ?? 0),
+    };
+  } catch (e: any) {
+    if (e?.code === 404) return null;
+    throw e;
+  }
 }
 
 /** 2点間の距離(m)。Haversine。GPS判定は決定論的に計算し、AIには結果だけ渡す */

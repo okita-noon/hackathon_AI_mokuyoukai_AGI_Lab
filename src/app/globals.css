@@ -197,3 +197,9 @@ h3 { font-size: 17px; margin: 0 0 6px; }
 .toggle { display: flex; align-items: center; gap: 8px; color: var(--muted);
   font-size: 13px; margin: 10px 0 0; cursor: pointer; }
 .toggle input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+
+/* ---- 動画証跡のプレビューとアップロード進捗 ---- */
+.preview { display: grid; gap: 8px; margin-top: 12px; }
+.preview video { width: 100%; max-height: 320px; background: #000; border: 1px solid var(--line); border-radius: 10px; }
+.progress { height: 6px; border-radius: 999px; background: #0f131a; border: 1px solid var(--line); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--accent); transition: width 120ms linear; }

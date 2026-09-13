@@ -73,7 +73,7 @@ export const GOAL_DESIGN_SCHEMA = {
           items: { type: Type.STRING },
           description: "判定時に1つずつ照合される観測可能な条件。",
         },
-        evidence_type: { type: Type.STRING, enum: ["photo", "screenshot", "video"] },
+        evidence_type: { type: Type.STRING, enum: ["photo", "video", "audio", "gps"] },
         suggested_penalty_amount: { type: Type.NUMBER },
         rationale: { type: Type.STRING, description: "なぜこの条件にしたか。80字以内。" },
       },
@@ -90,7 +90,7 @@ export type GoalDesign = {
     title: string;
     verification_rule: string;
     checklist: string[];
-    evidence_type: "photo" | "screenshot" | "video";
+    evidence_type: "photo" | "video" | "audio" | "gps";
     suggested_penalty_amount: number;
     rationale: string;
   };
