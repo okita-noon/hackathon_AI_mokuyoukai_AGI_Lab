@@ -30,6 +30,7 @@ type Body = {
   video?: unknown;
   frames?: unknown;
   promise?: unknown;
+  /** GCSへ直接アップロードされた動画 */
   storageUri?: unknown;
   /** GCSが無い環境で Files API に上げた動画（files/xxxx） */
   fileName?: unknown;
@@ -60,12 +61,31 @@ function mediaMeta(value: unknown): MediaMeta {
   };
 }
 
+/** DBがあるときだけ保存済みの約束を返す。DBに繋がらない場合は null */
+async function loadCommitment(id: string) {
+  try {
+    const user = await currentUser();
+    const stored = await pool.query(
+      `SELECT id, title, verification_rule, penalty_amount, deadline_at, status
+       FROM commitments WHERE id=$1 AND user_id=$2`,
+      [id, user.id],
+    );
+    const commitment = stored.rows[0];
+    if (!commitment) return "missing" as const;
+    if (!["ACTIVE", "GRACE"].includes(commitment.status)) return "closed" as const;
+    return commitment as Record<string, unknown>;
+  } catch (error) {
+    console.error("[verify:load]", error);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Body | null;
   const contract = validateContract(body?.promise);
-  if (!contract?.id) return NextResponse.json({ error: "保存済みの約束が必要です" }, { status: 400 });
+  if (!contract) return NextResponse.json({ error: "約束の内容が不正です" }, { status: 400 });
 
-  // 動画は署名付きURLでGCSへ直接上げ、ここにはURIだけが届く（Cloud Runの32MB制限を回避）
+  // 動画は署名付きURL（GCS）か Files API 経由で届き、ここにはURIだけが来る
   const storageUri = typeof body?.storageUri === "string" ? body.storageUri : null;
   const fileName = typeof body?.fileName === "string" && /^files\/[a-z0-9-]{1,64}$/i.test(body.fileName)
     ? body.fileName
@@ -90,18 +110,6 @@ export async function POST(req: Request) {
   }
 
   try {
-    const user = await currentUser();
-    const stored = await pool.query(
-      `SELECT id, title, verification_rule, penalty_amount, deadline_at, status
-       FROM commitments WHERE id=$1 AND user_id=$2`,
-      [contract.id, user.id],
-    );
-    const commitment = stored.rows[0];
-    if (!commitment) return NextResponse.json({ error: "約束が見つかりません" }, { status: 404 });
-    if (!["ACTIVE", "GRACE"].includes(commitment.status)) {
-      return NextResponse.json({ error: "この約束への提出は終了しています" }, { status: 409 });
-    }
-
     // GCSに上がっているはずのものが無い＝アップロード未完了。見ないまま判定しない
     let remoteHash: string | null = null;
     if (storageUri) {
@@ -113,7 +121,6 @@ export async function POST(req: Request) {
         );
       }
       if (remote.sizeBytes > MAX_VIDEO_BYTES) {
-        await deleteObject(storageUri);
         return NextResponse.json(
           { error: `動画が大きすぎます（${formatBytes(remote.sizeBytes)}）。${formatBytes(MAX_VIDEO_BYTES)} 以内で撮り直してください` },
           { status: 413 },
@@ -122,6 +129,21 @@ export async function POST(req: Request) {
       remoteHash = remote.md5;
       meta.sizeBytes = remote.sizeBytes;
     }
+
+    // DBがあれば保存済みの約束を正とし、無ければ画面から渡された約束をそのまま使う
+    const saved = contract.id ? await loadCommitment(contract.id) : null;
+    if (saved === "missing") return NextResponse.json({ error: "約束が見つかりません" }, { status: 404 });
+    if (saved === "closed") {
+      return NextResponse.json({ error: "この約束への提出は終了しています" }, { status: 409 });
+    }
+    const target = saved
+      ? {
+          goal: saved.title as string,
+          evidence: saved.verification_rule as string,
+          deadline: new Date(saved.deadline_at as string).toISOString(),
+          penalty: saved.penalty_amount as number,
+        }
+      : { goal: contract.goal, evidence: contract.evidence, deadline: contract.deadline, penalty: contract.penalty };
 
     const engine = detectEngine();
     const googleEngine = engine === "vertex" || engine === "gemini";
@@ -146,13 +168,12 @@ export async function POST(req: Request) {
           : [];
     const inline = sources.length ? [] : frames;
 
-    // 動画を読めないエンジン（OpenAI）で、代わりのフレームも無い場合だけ手詰まり
+    // 動画を読めないエンジンで、代わりのフレームも無い場合だけ手詰まり
     if (!sources.length && inline.length === 0 && engine !== "demo") {
-      if (storageUri) await deleteObject(storageUri);
       return NextResponse.json({ error: "この構成では動画を判定できません" }, { status: 400 });
     }
 
-    const required = requiredCount(`${commitment.title} ${commitment.verification_rule}`);
+    const required = requiredCount(`${target.goal} ${target.evidence}`);
     const isVideoSubmission = Boolean(storageUri || fileName || video);
     const kind = describe(isVideoSubmission, sources.length > 0, frames.length, meta);
     const prompt = `${JUDGE_PROMPT}
@@ -160,12 +181,12 @@ export async function POST(req: Request) {
 ---- 提出されたもの ----
 ${kind}
 
----- DBに保存された約束 ----
-目標: ${commitment.title}
-提出すべきエビデンス: ${commitment.verification_rule}
+---- 本人が結んだ約束 ----
+目標: ${target.goal}
+提出すべきエビデンス: ${target.evidence}
 ${required !== null ? `約束した回数: ${required}回（この回数に届かなければ ng）` : "回数の指定: なし"}
-期限: ${new Date(commitment.deadline_at).toISOString()}
-守れなかった場合の罰金: ${commitment.penalty_amount}円`;
+期限: ${target.deadline}
+守れなかった場合の罰金: ${target.penalty}円`;
 
     const generated = await generateJSON<Verdict>({
       system: OKAN_CHARACTER,
@@ -179,7 +200,6 @@ ${required !== null ? `約束した回数: ${required}回（この回数に届�
 
     // AIを呼べる設定なのに失敗したときは、作り話の判定を返さずエラーにする
     if (!generated.data && generated.engine !== "demo") {
-      if (storageUri) await deleteObject(storageUri);
       return NextResponse.json(
         { error: `${generated.error ?? "判定できませんでした"}。もう一度出してください` },
         { status: 502 },
@@ -187,67 +207,77 @@ ${required !== null ? `約束した回数: ${required}回（この回数に届�
     }
 
     let verdict = normalizeVerdict(generated.data ?? demoVerdictFor(inlineSize + (meta.sizeBytes ?? 0)), required);
-    const inlineSeed = video ?? frames[0];
-    const hash = remoteHash ?? filesApiHash
-      ?? createHash("sha256").update(inlineSeed?.base64 ?? storageUri ?? "").digest("hex");
-    const duplicate = await pool.query(
-      `SELECT 1 FROM proof_submissions p JOIN commitments c ON c.id=p.commitment_id
-       WHERE c.user_id=$1 AND p.content_sha256=$2 AND p.commitment_id<>$3 LIMIT 1`,
-      [user.id, hash, contract.id],
-    );
-    if (duplicate.rowCount && verdict.verdict === "ok") {
-      verdict = { ...verdict, verdict: "suspicious", score: Math.min(verdict.score, 40), okan: "前にも同じ証拠を出してるやろ。撮り直して出しや。" };
+    const engineLabel = generated.data ? generated.engine : "demo";
+
+    if (!saved) {
+      // DBを使わない経路。判定は返すが、記録は残らない
+      return NextResponse.json({ ...verdict, engine: engineLabel, analyzed: kind, persisted: false });
     }
 
-    const mimeType = filesApiSource?.mimeType ?? uploadedMime ?? video?.mimeType ?? frames[0]?.mimeType ?? "image/jpeg";
-    await withTransaction(async (client) => {
-      const proof = await client.query(
-        `INSERT INTO proof_submissions
-           (commitment_id, storage_uri, mime_type, evidence_type, content_sha256, hash_source, media_meta)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-        [
-          // エビデンス本体は保存しない。これは「何を見たか」を後から辿るための印
-          contract.id, `${remoteHash ? "deleted" : "inline"}://${hash}`, mimeType, isVideoSubmission ? "video" : "photo",
-          hash, remoteHash ? "gcs-md5" : filesApiHash ? "files-api-sha256" : "sha256", JSON.stringify({ ...meta, analyzed: kind, counted: verdict.counted ?? null }),
-        ],
+    try {
+      const user = await currentUser();
+      const inlineSeed = video ?? frames[0];
+      const hash = remoteHash ?? filesApiHash
+        ?? createHash("sha256").update(inlineSeed?.base64 ?? storageUri ?? "").digest("hex");
+      const duplicate = await pool.query(
+        `SELECT 1 FROM proof_submissions p JOIN commitments c ON c.id=p.commitment_id
+         WHERE c.user_id=$1 AND p.content_sha256=$2 AND p.commitment_id<>$3 LIMIT 1`,
+        [user.id, hash, contract.id],
       );
-      const status = verdict.verdict === "ok" ? "APPROVED" : verdict.verdict === "ng" ? "REJECTED" : "UNCERTAIN";
-      await client.query(
-        `INSERT INTO judgement_logs
-           (commitment_id, proof_submission_id, status, confidence_score, reasoning,
-            suspicious_indicators, appeal_recommended, model, raw_response)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [contract.id, proof.rows[0].id, status, verdict.score / 100, verdict.whatISee,
-          duplicate.rowCount ? ["duplicate_hash_match"] : [], status !== "APPROVED",
-          generated.data ? generated.engine : "demo", JSON.stringify(verdict)],
-      );
-      if (status === "APPROVED") {
-        await client.query(`UPDATE commitments SET status='APPROVED', updated_at=now() WHERE id=$1`, [contract.id]);
-        await client.query(`UPDATE users SET trust_score=LEAST(1, trust_score+0.05) WHERE id=$1`, [user.id]);
-      } else {
-        await client.query(
-          `UPDATE commitments SET status='GRACE', grace_expires_at=now()+interval '24 hours', updated_at=now() WHERE id=$1`,
-          [contract.id],
-        );
+      if (duplicate.rowCount && verdict.verdict === "ok") {
+        verdict = { ...verdict, verdict: "suspicious", score: Math.min(verdict.score, 40), okan: "前にも同じ証拠を出してるやろ。撮り直して出しや。" };
       }
-      const state = (await client.query(`SELECT ai_okan_state FROM users WHERE id=$1`, [user.id])).rows[0]?.ai_okan_state ?? {};
-      const next: Partial<AppState> = { ...state, contract: { ...(state.contract ?? contract), status } };
-      await saveState(user.id, next, client);
-    });
 
-    // エビデンス本体は残さない。判定に使い終わったら消す
-    if (storageUri) await deleteObject(storageUri);
+      const mimeType = filesApiSource?.mimeType ?? uploadedMime ?? video?.mimeType ?? frames[0]?.mimeType ?? "image/jpeg";
+      await withTransaction(async (tx) => {
+        const proof = await tx.query(
+          `INSERT INTO proof_submissions
+             (commitment_id, storage_uri, mime_type, evidence_type, content_sha256, hash_source, media_meta)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+          [
+            // エビデンス本体は保存しない。これは「何を見たか」を後から辿るための印
+            contract.id, `${remoteHash ? "deleted" : "inline"}://${hash}`, mimeType,
+            isVideoSubmission ? "video" : "photo", hash,
+            remoteHash ? "gcs-md5" : filesApiHash ? "files-api-sha256" : "sha256",
+            JSON.stringify({ ...meta, analyzed: kind, counted: verdict.counted ?? null }),
+          ],
+        );
+        const status = verdict.verdict === "ok" ? "APPROVED" : verdict.verdict === "ng" ? "REJECTED" : "UNCERTAIN";
+        await tx.query(
+          `INSERT INTO judgement_logs
+             (commitment_id, proof_submission_id, status, confidence_score, reasoning,
+              suspicious_indicators, appeal_recommended, model, raw_response)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [contract.id, proof.rows[0].id, status, verdict.score / 100, verdict.whatISee,
+            duplicate.rowCount ? ["duplicate_hash_match"] : [], status !== "APPROVED",
+            engineLabel, JSON.stringify(verdict)],
+        );
+        if (status === "APPROVED") {
+          await tx.query(`UPDATE commitments SET status='APPROVED', updated_at=now() WHERE id=$1`, [contract.id]);
+          await tx.query(`UPDATE users SET trust_score=LEAST(1, trust_score+0.05) WHERE id=$1`, [user.id]);
+        } else {
+          await tx.query(
+            `UPDATE commitments SET status='GRACE', grace_expires_at=now()+interval '24 hours', updated_at=now() WHERE id=$1`,
+            [contract.id],
+          );
+        }
+        const state = (await tx.query(`SELECT ai_okan_state FROM users WHERE id=$1`, [user.id])).rows[0]?.ai_okan_state ?? {};
+        const next: Partial<AppState> = { ...state, contract: { ...(state.contract ?? contract), status } };
+        await saveState(user.id, next, tx);
+      });
 
-    return NextResponse.json({
-      ...verdict,
-      engine: generated.data ? generated.engine : "demo",
-      analyzed: kind,
-      persisted: true,
-    });
+      return NextResponse.json({ ...verdict, engine: engineLabel, analyzed: kind, persisted: true });
+    } catch (error) {
+      // 判定はできているので、保存に失敗しても結果は返す
+      console.error("[verify:persist]", error);
+      return NextResponse.json({ ...verdict, engine: engineLabel, analyzed: kind, persisted: false });
+    }
   } catch (error) {
     console.error("[verify]", error);
+    return NextResponse.json({ error: "証拠を判定できませんでした。もう一度出してください" }, { status: 503 });
+  } finally {
+    // エビデンス本体は残さない。判定に使い終わったら消す
     if (storageUri) await deleteObject(storageUri);
-    return NextResponse.json({ error: "判定結果を保存できませんでした" }, { status: 503 });
   }
 }
 

@@ -49,8 +49,29 @@ export async function generateJSON<T>(args: Args): Promise<Generated<T>> {
     return data ? { data, engine } : { data: null, engine, error: "AIの返答を読み取れませんでした" };
   } catch (error) {
     console.error("[llm] failed:", error);
-    return { data: null, engine, error: error instanceof Error ? error.message : "AIの呼び出しに失敗しました" };
+    return { data: null, engine, error: humanError(error) };
   }
+}
+
+/**
+ * APIのエラーは長いJSONで返ってくる。そのまま画面に出しても何をすればいいか分からないので、
+ * 対処が分かる一文に置き換える（詳細はサーバーのログに残している）。
+ */
+function humanError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/RESOURCE_EXHAUSTED|"code":\s*429|quota/i.test(message)) {
+    return "AIの利用上限に達しました（無料枠は1日20回まで）。しばらく待つか、課金を有効にしたキーで試してください";
+  }
+  if (/no longer available|"code":\s*404|NOT_FOUND/i.test(message)) {
+    return "指定のモデルを使えません。モデル名の設定を確認してください";
+  }
+  if (/時間内|timed out|deadline/i.test(message)) {
+    return "AIの応答が時間内に返りませんでした。もう少し短い動画で試してください";
+  }
+  if (/PERMISSION_DENIED|API key|UNAUTHENTICATED/i.test(message)) {
+    return "AIの認証に失敗しました。APIキーの設定を確認してください";
+  }
+  return "AIの呼び出しに失敗しました";
 }
 
 export function client(engine: "vertex" | "gemini") {

@@ -58,8 +58,8 @@ export function PromiseForm({
           </div>
         </Field>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          <Field label="いつまでに">
+        <div className="grid items-stretch gap-6 sm:grid-cols-2">
+          <Field label="いつまでに" hint="期限を決めないと「いつかやる」になります。">
             <select
               value={deadline}
               disabled={locked}
@@ -81,7 +81,7 @@ export function PromiseForm({
           </Field>
         </div>
 
-        <Field label="守れへんかったら払う金額" hint="金額が高いほど効果があります。">
+        <Field label="守れなかったときに払う金額" hint="金額が高いほど効果があります。">
           <div className="flex items-center gap-5">
             <input
               type="range"
@@ -116,7 +116,7 @@ export function PromiseForm({
             <EngineBadge engine={engine} />
           </div>
           <OkanBubble text={reply} />
-          <Button onClick={onNext}>監視をはじめる</Button>
+          <Button onClick={onNext}>おかんに見守ってもらう</Button>
         </div>
       )}
     </div>
@@ -132,14 +132,16 @@ function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  // 横並びにしたとき、説明文の行数が違っても入力欄の上端が揃うようにする。
+  // 縦積みにして入力欄を下端へ寄せるので、将来どちらかの文言が増えても崩れない。
   return (
-    <div className="space-y-2">
+    <div className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-bold">{label}</p>
         <span className="bg-danger px-2 py-0.5 text-xs font-bold text-white">必須</span>
       </div>
       {hint && <p className="text-sm text-muted">{hint}</p>}
-      {children}
+      <div className="mt-auto">{children}</div>
     </div>
   );
 }

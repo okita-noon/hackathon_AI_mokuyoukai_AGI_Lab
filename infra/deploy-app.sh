@@ -32,7 +32,7 @@ gcloud run services update "$SERVICE" --region "$REGION" \
   --update-labels "commit-sha=${GITHUB_SHA}"
 REVISION="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
 CANDIDATE_URL="$(gcloud run services describe "$SERVICE" --region "$REGION" \
-  --format='value(status.traffic[?tag=candidate].url)')"
+  --format='value(status.traffic.url)')"
 test -n "$CANDIDATE_URL"
 curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 5 --max-time 30 \
   "${CANDIDATE_URL}/api/health" >/dev/null
