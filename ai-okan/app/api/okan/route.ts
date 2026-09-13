@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import pastSelf from "@/data/usutaku.json";
 import { currentUser, saveState, withTransaction } from "@/lib/backend/db";
 import { deadlineAt, validateContract } from "@/lib/backend/contract";
+import { checkoutEnabled } from "@/lib/backend/payment";
 import { generateJSON, detectEngine } from "@/lib/llm";
 import { OKAN_CHARACTER, PROFILE_PROMPT, PROMISE_PROMPT, SCOLD_PROMPT } from "@/lib/prompts";
 import { demoProfile, demoPromiseReply, demoScold } from "@/lib/demo";
@@ -108,13 +109,20 @@ export async function POST(req: Request) {
         [contract.id, user.id],
       );
       if (updated.rowCount !== 1) throw new Error("active commitment not found");
+      // Stripe があれば支払い待ちの請求を作り、画面から Checkout で払ってもらう
       await client.query(
-        `INSERT INTO penalty_transactions (commitment_id, amount, currency, status, idempotency_key)
-         VALUES ($1,$2,'jpy','MOCKED',$3) ON CONFLICT (idempotency_key) DO NOTHING`,
-        [contract.id, updated.rows[0].penalty_amount, `ai-okan-${contract.id}`],
+        `INSERT INTO penalty_transactions (commitment_id, amount, currency, status, idempotency_key, provider)
+         VALUES ($1,$2,'jpy',$3,$4,$5) ON CONFLICT (idempotency_key) DO NOTHING`,
+        [
+          contract.id,
+          updated.rows[0].penalty_amount,
+          checkoutEnabled ? "REQUIRES_ACTION" : "MOCKED",
+          `ai-okan-${contract.id}`,
+          checkoutEnabled ? "stripe_checkout" : "mock",
+        ],
       );
     });
-    return NextResponse.json({ okan, engine });
+    return NextResponse.json({ okan, engine, payment: checkoutEnabled ? "stripe_checkout" : "mock" });
   } catch (error) {
     console.error("[okan:scold]", error);
     return NextResponse.json({ okan, engine, persisted: false });
