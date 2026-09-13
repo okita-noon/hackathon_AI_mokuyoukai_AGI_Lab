@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Promise as Contract, Verdict, Engine } from "@/lib/types";
-import { Button, EngineBadge, OkanBubble } from "./ui";
+import { Button, EngineBadge, Heading, OkanBubble } from "./ui";
 
 type Props = {
   contract: Contract;
@@ -55,7 +55,7 @@ export function Watch({ contract, onReset }: Props) {
     return (
       <div className="space-y-8 text-center">
         <p className="text-sm font-bold tracking-widest text-muted">期限切れ</p>
-        <p className="slam text-7xl font-black text-accent sm:text-8xl">
+        <p className="text-6xl font-bold text-danger tabular-nums sm:text-7xl">
           ¥{contract.penalty.toLocaleString()}
         </p>
         <p className="text-lg font-bold">罰金が発動しました</p>
@@ -65,7 +65,7 @@ export function Watch({ contract, onReset }: Props) {
         <div className="flex flex-wrap items-center justify-center gap-3">
           <EngineBadge engine={scold.engine} />
         </div>
-        <Button variant="ghost" onClick={onReset}>
+        <Button variant="secondary" onClick={onReset}>
           もう一回、約束しなおす
         </Button>
       </div>
@@ -74,21 +74,18 @@ export function Watch({ contract, onReset }: Props) {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-3">
-        <h2 className="text-3xl font-black sm:text-4xl">監視</h2>
-        <p className="text-muted">証拠を出すまで、おかんは信じひん。</p>
-      </header>
+      <Heading lead="証拠を出すまで、おかんは信じひん。">監視</Heading>
 
-      <dl className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-4">
+      <dl className="grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         {[
           { k: "約束", v: contract.goal },
           { k: "期限", v: contract.deadline },
           { k: "証拠", v: contract.evidence },
           { k: "罰金", v: `¥${contract.penalty.toLocaleString()}` },
         ].map((r) => (
-          <div key={r.k} className="bg-bg-soft p-4">
-            <dt className="text-[11px] font-bold tracking-widest text-muted">{r.k}</dt>
-            <dd className="mt-1 font-bold">{r.v}</dd>
+          <div key={r.k} className="bg-white p-4">
+            <dt className="bg-bg-soft px-2 py-0.5 text-xs font-bold text-muted">{r.k}</dt>
+            <dd className="mt-2 font-bold">{r.v}</dd>
           </div>
         ))}
       </dl>
@@ -97,14 +94,13 @@ export function Watch({ contract, onReset }: Props) {
         <div className="space-y-4">
           <div
             onClick={() => fileRef.current?.click()}
-            className="grid h-56 cursor-pointer place-items-center overflow-hidden rounded-2xl border border-dashed border-line bg-bg-soft text-center transition hover:border-muted"
+            className="grid h-56 cursor-pointer place-items-center overflow-hidden rounded-xl border-2 border-dashed border-line-strong bg-bg-soft text-center transition hover:bg-bg-soft"
           >
             {preview ? (
               // 提出された証拠のプレビュー
               <img src={preview} alt="提出した証拠" className="size-full object-cover" />
             ) : (
               <div className="space-y-2 px-6">
-                <p className="text-3xl">📷</p>
                 <p className="font-bold">証拠の写真を出す</p>
                 <p className="text-xs text-muted">タップして撮影／ファイルを選ぶ</p>
               </div>
@@ -125,7 +121,7 @@ export function Watch({ contract, onReset }: Props) {
             <Button onClick={() => fileRef.current?.click()} disabled={busy !== null}>
               {busy === "judge" ? "おかんが見とる…" : "証拠を提出する"}
             </Button>
-            <Button variant="ghost" onClick={timeUp} disabled={busy !== null}>
+            <Button variant="secondary" onClick={timeUp} disabled={busy !== null}>
               {busy === "scold" ? "…" : "期限が来てもうた"}
             </Button>
           </div>
@@ -133,7 +129,7 @@ export function Watch({ contract, onReset }: Props) {
 
         <div className="min-h-56">
           {busy === "judge" && (
-            <p className="blink text-muted">おかんが写真を確認しとる…</p>
+            <p aria-live="polite" className="text-muted">おかんが写真を確認しとる…</p>
           )}
           {verdict && (
             <div className="rise space-y-4">
@@ -146,12 +142,10 @@ export function Watch({ contract, onReset }: Props) {
               </p>
               <OkanBubble text={verdict.okan} tone={verdict.verdict === "ok" ? "normal" : "angry"} />
               <div className="space-y-1">
-                <p className="text-[11px] font-bold tracking-widest text-muted">
-                  証拠としての信頼度 {verdict.score}
-                </p>
-                <div className="h-2 overflow-hidden rounded-full bg-line">
+                <p className="text-xs font-bold text-muted">証拠としての信頼度 {verdict.score} / 100</p>
+                <div className="h-3 overflow-hidden rounded-xl border border-line bg-white">
                   <div
-                    className={`h-full ${verdict.verdict === "ok" ? "bg-ok" : "bg-accent"}`}
+                    className={`h-full ${verdict.verdict === "ok" ? "bg-ok" : "bg-danger"}`}
                     style={{ width: `${verdict.score}%` }}
                   />
                 </div>
@@ -166,12 +160,12 @@ export function Watch({ contract, onReset }: Props) {
 
 function VerdictChip({ verdict }: { verdict: Verdict["verdict"] }) {
   const map = {
-    ok: { label: "認めたる", cls: "border-ok/60 text-ok" },
-    suspicious: { label: "怪しい", cls: "border-accent-soft/60 text-accent-soft" },
-    ng: { label: "話にならん", cls: "border-accent/60 text-accent" },
+    ok: { label: "認めたる", cls: "border-ok bg-ok text-white" },
+    suspicious: { label: "怪しい", cls: "border-line-strong bg-bg-soft text-fg" },
+    ng: { label: "話にならん", cls: "border-danger bg-danger text-white" },
   }[verdict];
   return (
-    <span className={`rounded-full border px-4 py-1.5 text-sm font-black ${map.cls}`}>
+    <span className={`border-2 px-4 py-1 text-sm font-bold ${map.cls}`}>
       {map.label}
     </span>
   );

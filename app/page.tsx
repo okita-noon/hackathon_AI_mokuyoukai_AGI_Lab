@@ -91,9 +91,10 @@ export default function Page() {
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10 sm:py-14">
-      <div className="mb-10 flex items-center justify-between gap-4">
+      <div className="mb-10 flex flex-wrap items-center justify-between gap-4 border-b-4 border-accent pb-4">
         <button onClick={reset} className="text-left">
-          <p className="text-xl font-black tracking-tight">AIおかん</p>
+          <p className="text-xl font-bold">AIおかん</p>
+          <p className="text-xs text-muted">あんたのこと、ぜんぶ知っとるで</p>
         </button>
         {s.step > 0 && <StepDots step={s.step} />}
       </div>
@@ -119,7 +120,10 @@ export default function Page() {
       {s.step === 4 && s.contract && <Watch contract={s.contract} onReset={reset} />}
 
       <footer className="mt-16 border-t border-line pt-6 text-xs text-muted">
-        ハッカソン20260913 / AI木曜会 × AGI Lab — 状態はこの端末のブラウザにだけ保存されます
+        <p>ハッカソン20260913 / AI木曜会 × AGI Lab</p>
+        <p className="mt-1">
+          入力した内容はこの端末のブラウザにだけ保存されます。サーバーには残りません。
+        </p>
       </footer>
     </main>
   );
@@ -137,19 +141,26 @@ function Intro({ onStart }: { onStart: () => void }) {
 
   return (
     <div className="space-y-12">
-      <section className="space-y-6">
-        <OkanFace size={96} />
-        <h1 className="text-5xl font-black leading-[1.1] tracking-tight sm:text-7xl">
+      <section className="space-y-7">
+        <div className="flex items-center gap-4">
+          <OkanFace size={88} />
+          <p className="rounded-2xl rounded-bl-md border-2 border-line-strong bg-bg px-5 py-3 text-lg font-bold">
+            あんた、また来たんか。
+          </p>
+        </div>
+        <h1 className="text-4xl font-bold leading-[1.25] sm:text-5xl">
           自分以上に
           <br />
           自分を知っとるAIが、
           <br />
           <span className="text-accent">逃がしてくれへん。</span>
         </h1>
-        <p className="max-w-2xl text-lg leading-relaxed text-muted">
+        <p className="max-w-2xl text-lg text-muted">
           目標が続かへんのは、意志が弱いからやない。
-          <span className="text-fg">誰も見てへんから</span>や。
-          AIおかんは、あんたの過去を全部読んだ上で約束を結び、証拠を出すまで許さん。
+          <span className="font-bold text-fg">誰も見てへんから</span>や。
+          あんたの過去をぜんぶ読んだおかんが約束を結んで、証拠を出すまで許さん。
+          <br />
+          口はキツいけど、見放さへんで。
         </p>
         <div className="flex flex-wrap items-center gap-4">
           <Button onClick={onStart}>あんたのこと、教えて</Button>
@@ -157,19 +168,24 @@ function Intro({ onStart }: { onStart: () => void }) {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-4">
-        {[
-          { n: "01", t: "過去を渡す", d: "Gmail・X・LINEの履歴をそのまま投入する" },
-          { n: "02", t: "見立てを食らう", d: "AIが挫折パターンを名指しで言い当てる" },
-          { n: "03", t: "約束を結ぶ", d: "期限・証拠・罰金を自分で決めて自分を縛る" },
-          { n: "04", t: "監視される", d: "写真をAIが判定。ごまかしは通らん" },
-        ].map((c) => (
-          <div key={c.n} className="rounded-2xl border border-line bg-bg-soft p-5">
-            <p className="text-xs font-black tracking-widest text-accent">{c.n}</p>
-            <p className="mt-2 font-black">{c.t}</p>
-            <p className="mt-1 text-sm leading-relaxed text-muted">{c.d}</p>
-          </div>
-        ))}
+      <section className="space-y-4">
+        <h2 className="border-l-8 border-accent pl-4 text-xl font-bold">やることは4つだけ</h2>
+        <ol className="grid gap-4 sm:grid-cols-4">
+          {[
+            { n: 1, t: "過去を渡す", d: "Gmail・X・LINEの履歴をそのまま投入する" },
+            { n: 2, t: "見立てを食らう", d: "AIが挫折パターンを名指しで言い当てる" },
+            { n: 3, t: "約束を結ぶ", d: "期限・証拠・罰金を自分で決めて自分を縛る" },
+            { n: 4, t: "監視される", d: "写真をAIが判定。ごまかしは通らん" },
+          ].map((c) => (
+            <li key={c.n} className="rounded-xl border border-line bg-bg p-5">
+              <span className="grid size-8 place-items-center rounded-full bg-accent font-bold text-white">
+                {c.n}
+              </span>
+              <p className="mt-3 font-bold">{c.t}</p>
+              <p className="mt-1 text-sm text-muted">{c.d}</p>
+            </li>
+          ))}
+        </ol>
       </section>
     </div>
   );

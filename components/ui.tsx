@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
 import type { Engine } from "@/lib/types";
 
 export function Button({
@@ -14,15 +13,16 @@ export function Button({
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "secondary" | "danger";
   type?: "button" | "submit";
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-7 py-3.5 text-base font-bold transition disabled:opacity-40 disabled:cursor-not-allowed";
-  const style =
-    variant === "primary"
-      ? "bg-accent text-white hover:brightness-110 shadow-[0_10px_30px_-10px_rgba(228,71,46,0.9)]"
-      : "border border-line text-muted hover:text-fg hover:border-muted";
+    "inline-flex min-h-12 items-center justify-center rounded-xl px-7 py-2.5 text-base font-bold transition disabled:cursor-not-allowed disabled:opacity-50";
+  const style = {
+    primary: "bg-accent text-white hover:bg-accent-soft",
+    secondary: "border-2 border-accent bg-bg text-accent hover:bg-bg-soft",
+    danger: "bg-danger text-white hover:bg-accent-soft",
+  }[variant];
   return (
     <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${style}`}>
       {children}
@@ -36,11 +36,11 @@ export function EngineBadge({ engine }: { engine: Engine | null }) {
   const live = engine !== "demo";
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold tracking-wide ${
-        live ? "border-ok/50 text-ok" : "border-line text-muted"
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${
+        live ? "border-ok bg-bg text-ok" : "border-line bg-bg-soft text-muted"
       }`}
     >
-      <span className={`size-1.5 rounded-full ${live ? "bg-ok" : "bg-muted"}`} />
+      <span className={`size-2 rounded-full ${live ? "bg-ok" : "bg-muted"}`} />
       {live ? `${engine.toUpperCase()} で生成` : "デモモード（固定応答）"}
     </span>
   );
@@ -49,20 +49,27 @@ export function EngineBadge({ engine }: { engine: Engine | null }) {
 export function StepDots({ step }: { step: number }) {
   const labels = ["過去", "見立て", "約束", "監視"];
   return (
-    <div className="flex items-center gap-2">
-      {labels.map((l, i) => (
-        <div key={l} className="flex items-center gap-2">
-          <span
-            className={`text-[11px] font-bold tracking-widest ${
-              i + 1 === step ? "text-accent" : i + 1 < step ? "text-muted" : "text-line"
+    <ol className="flex items-center gap-1.5 text-xs font-bold">
+      {labels.map((l, i) => {
+        const n = i + 1;
+        const state = n === step ? "current" : n < step ? "done" : "todo";
+        return (
+          <li
+            key={l}
+            aria-current={state === "current" ? "step" : undefined}
+            className={`rounded-full border px-3 py-1 ${
+              state === "current"
+                ? "border-accent bg-accent text-white"
+                : state === "done"
+                  ? "border-line bg-bg-soft text-muted"
+                  : "border-line bg-bg text-muted/50"
             }`}
           >
-            {l}
-          </span>
-          {i < labels.length - 1 && <span className="h-px w-5 bg-line" />}
-        </div>
-      ))}
-    </div>
+            {n}. {l}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -70,16 +77,21 @@ export function OkanFace({ tone = "normal", size = 56 }: { tone?: "normal" | "an
   const [broken, setBroken] = useState(false);
   return (
     <div
-      className={`grid shrink-0 place-items-center overflow-hidden rounded-full ${
-        tone === "angry" ? "bg-accent" : "bg-accent-soft/90"
+      className={`grid shrink-0 place-items-center overflow-hidden rounded-full border-2 ${
+        tone === "angry" ? "border-danger bg-white" : "border-line bg-bg-soft"
       }`}
       style={{ width: size, height: size }}
       aria-hidden
     >
       {broken ? (
-        <span style={{ fontSize: size * 0.45 }}>{tone === "angry" ? "\u{1F4A2}" : "\u{1F475}"}</span>
+        <span
+          className={`font-bold ${tone === "angry" ? "text-danger" : "text-muted"}`}
+          style={{ fontSize: size * 0.26 }}
+        >
+          おかん
+        </span>
       ) : (
-        // 差し替え用: public/okan.png を置くとおかんの顔になる。無ければ絵文字にフォールバック
+        // 差し替え用: public/okan.png を置くとおかんの顔になる。無ければ文字にフォールバック
         <img
           src="/okan.png"
           alt=""
@@ -97,9 +109,24 @@ export function OkanBubble({ text, tone = "normal" }: { text: string; tone?: "no
   return (
     <div className="flex items-start gap-4">
       <OkanFace tone={tone} />
-      <div className="relative rounded-2xl rounded-tl-sm border border-line bg-bg-soft px-5 py-4 text-[17px] leading-relaxed">
+      <div
+        className={`relative rounded-2xl rounded-tl-md border-2 bg-bg px-5 py-4 text-[17px] ${
+          tone === "angry" ? "border-danger" : "border-line-strong"
+        }`}
+      >
+        <p className="mb-1 text-xs font-bold text-muted">おかん</p>
         {text}
       </div>
+    </div>
+  );
+}
+
+/** 見出し。DADSの見出しに倣って左に色罫を置く */
+export function Heading({ children, lead }: { children: React.ReactNode; lead?: string }) {
+  return (
+    <div className="space-y-2">
+      <h2 className="border-l-8 border-accent pl-4 text-2xl font-bold sm:text-3xl">{children}</h2>
+      {lead && <p className="text-muted">{lead}</p>}
     </div>
   );
 }

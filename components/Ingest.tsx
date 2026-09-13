@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import pastSelf from "@/data/past-self.json";
-import { Button } from "./ui";
+import { Button, Heading } from "./ui";
 
-const ICONS: Record<string, string> = { gmail: "✉️", x: "𝕏", line: "💬" };
+const KIND: Record<string, string> = { gmail: "メール", x: "SNS投稿", line: "メッセージ" };
 
 export function Ingest({
   onDone,
@@ -36,38 +36,38 @@ export function Ingest({
 
   return (
     <div className="space-y-8">
-      <header className="space-y-3">
-        <h2 className="text-3xl font-black sm:text-4xl">あんたのこと、教えて</h2>
-        <p className="text-muted">
-          過去{total}件の履歴をおかんに渡す。Gmailのエクスポート、Xのアーカイブ、LINEのトーク履歴——
-          <span className="text-fg">どれも今日エクスポートできる、実在する形式</span>や。
-        </p>
-      </header>
+      <Heading>あんたのこと、教えて</Heading>
+      <p className="text-muted">
+        過去{total}件の履歴をおかんに渡します。Gmailのエクスポート、Xのアーカイブ、LINEのトーク履歴——
+        <span className="font-bold text-fg">どれも今日エクスポートできる、実在する形式</span>です。
+      </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
         {pastSelf.sources.map((s) => (
-          <div key={s.id} className="rounded-2xl border border-line bg-bg-soft p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-2xl">{ICONS[s.id]}</span>
-              <span className="text-xs text-muted">{s.note}</span>
+          <div key={s.id} className="rounded-xl border border-line bg-white p-5">
+            <div className="flex items-center justify-between border-b border-line pb-2">
+              <span className="bg-bg-soft px-2 py-0.5 text-xs font-bold text-muted">
+                {KIND[s.id]}
+              </span>
+              <span className="text-sm font-bold tabular-nums">{s.items.length}件</span>
             </div>
             <p className="mt-3 text-lg font-bold">{s.label}</p>
-            <p className="text-sm text-muted">{s.items.length}件</p>
+            <p className="text-xs text-muted">{s.note}</p>
             <ul className="mt-3 space-y-1 text-[11px] leading-snug text-muted">
               {s.items.slice(0, 2).map((i) => (
                 <li key={i.date} className="truncate">
                   {i.date} {i.text}
                 </li>
               ))}
-              <li className="text-line">…ほか{s.items.length - 2}件</li>
+              <li className="text-muted/70">…ほか{s.items.length - 2}件</li>
             </ul>
           </div>
         ))}
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="extra" className="text-sm font-bold text-muted">
-          言うとくことある？（任意）
+        <label htmlFor="extra" className="block text-sm font-bold">
+          言うとくことある？<span className="ml-2 bg-bg-soft px-2 py-0.5 text-xs font-normal text-muted">任意</span>
         </label>
         <textarea
           id="extra"
@@ -75,18 +75,18 @@ export function Ingest({
           onChange={(e) => setExtra(e.target.value)}
           rows={2}
           placeholder="例：最近ほんまに時間がない"
-          className="w-full rounded-xl border border-line bg-bg-soft px-4 py-3 text-fg outline-none placeholder:text-line focus:border-muted"
+          className="w-full rounded-xl border-2 border-line-strong bg-white px-4 py-3 text-fg placeholder:text-muted/60"
         />
       </div>
 
       {busy ? (
-        <div className="rounded-2xl border border-line bg-bg-soft p-5 font-mono text-sm text-muted">
+        <div aria-live="polite" className="rounded-xl border border-line bg-bg-soft p-5 font-mono text-sm text-muted">
           {log.map((l) => (
             <p key={l} className="rise">
               ▸ {l}
             </p>
           ))}
-          <p className="blink text-accent">…</p>
+          <p className="text-accent">…</p>
         </div>
       ) : (
         <Button onClick={() => onDone(extra)}>おかんに全部渡す</Button>
